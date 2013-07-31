@@ -2,19 +2,28 @@ package nl.topicus.mssql2monetdb;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.DecimalFormat;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
+
+import nl.cwi.monetdb.mcl.MCLException;
+import nl.cwi.monetdb.mcl.io.BufferedMCLReader;
+import nl.cwi.monetdb.mcl.io.BufferedMCLWriter;
+import nl.cwi.monetdb.mcl.net.MapiSocket;
+import nl.cwi.monetdb.mcl.parser.MCLParseException;
 
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
@@ -36,6 +45,7 @@ public class CopyTool {
 	
 	private Connection mssqlConn;
 	private Connection monetDbConn;
+	private MapiSocket monetDbServer;
 	
 	private Map<String, CopyTable> tablesToCopy = new HashMap<String, CopyTable>();
 	
@@ -123,16 +133,20 @@ public class CopyTool {
 		}
 		
 		// copy data
-		try {
-			copyData(table, resultSet, metaData, rowCount);
-		} catch (SQLException e) {
-			log.error("Copying data failed", e);
-			
-			// print full chain of exceptions
-			SQLException nextException = e.getNextException();
-			while(nextException != null) {
-				nextException.printStackTrace();
-				nextException = nextException.getNextException();
+		if (table.getCopyMethod() == CopyTable.COPY_METHOD_COPYINTO && monetDbServer != null) {
+			//copyDataWithCopyInto(table, resultSet, metaData, rowCount);	
+		} else {
+			try {
+				copyData(table, resultSet, metaData, rowCount);
+			} catch (SQLException e) {
+				log.error("Copying data failed", e);
+				
+				// print full chain of exceptions
+				SQLException nextException = e.getNextException();
+				while(nextException != null) {
+					nextException.printStackTrace();
+					nextException = nextException.getNextException();
+				}
 			}
 		}
 		
@@ -189,6 +203,9 @@ public class CopyTool {
 			// execute CREATE TABLE SQL query
 			q.execute(createSql.toString());
 			log.info("Table created");
+			
+			// fresh table so we can use COPY INTO since we know its ok
+			//table.setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
 		}
 	}
 	
@@ -331,6 +348,50 @@ public class CopyTool {
 		log.info("Table truncated");
 	}
 	
+	protected void copyDataWithCopyInto(CopyTable table, ResultSet resultSet, ResultSetMetaData metaData, long rowCount) throws Exception {
+		log.info("Using COPY INTO to copy data to table " + table.getToTableSql() + "...");
+		
+		BufferedMCLReader in = monetDbServer.getReader();
+	    BufferedMCLWriter out = monetDbServer.getWriter();
+	    
+	    String error = in.waitForPrompt();
+	    if (error != null)
+	    	throw new Exception(error);
+	    
+	    String query = "COPY INTO " + table.getToTableSql() + " FROM STDIN USING DELIMITERS ',','\\n','\"' NULL AS '';";
+	    
+	    // the leading 's' is essential, since it is a protocol
+	    // marker that should not be omitted, likewise the
+	    // trailing semicolon
+	    out.write('s');
+	    out.write(query);
+	    out.newLine();
+	    
+	    while(resultSet.next()) {
+	    	for(int i=1; i <= metaData.getColumnCount(); i++) {
+				Object value = resultSet.getObject(i);
+				String valueStr = value.toString();
+				
+				// TODO: escape " with \" and escape \ with \\
+				
+				if (value == null) {
+					out.write("");
+				} else {				
+					out.write("\"" + valueStr + "\"");
+				}
+				
+				// column separator (not for last column)
+				if (i < metaData.getColumnCount())
+					out.write(",");				
+	    	}
+	    	
+	    	// record separator
+	    	out.newLine();	    	
+	    }
+		
+		log.info("Finished copying data");
+	}
+	
 	protected void copyData(CopyTable table, ResultSet resultSet, ResultSetMetaData metaData, long rowCount) throws SQLException {
 		log.info("Copying data to table " + table.getToTableSql() + "...");
 		
@@ -375,8 +436,8 @@ public class CopyTool {
 					if (StringUtils.isEmpty(values[i-1])) {
 						values[i-1] = "NULL";
 					}
-				} else if (value instanceof String) {
-					values[i-1] = quoteMonetDbValue((String)value);
+				} else if (value instanceof String || value instanceof Timestamp) {
+					values[i-1] = quoteMonetDbValue(value.toString());
 				} else {
 					throw new SQLException("Unknown value type: " + value.getClass().getName());
 				}
@@ -590,6 +651,40 @@ public class CopyTool {
 			closeConnections();
 			System.exit(1);
 		}
+		
+		monetDbServer = new MapiSocket();
+		
+		monetDbServer.setDatabase(config.getProperty(CONFIG_KEYS.MONETDB_DATABASE.toString()));
+		monetDbServer.setLanguage("sql");
+		
+		try {
+			log.info("Opening direct connection to MonetDB server...");
+			List<String> warnList = monetDbServer.connect(
+				config.getProperty(CONFIG_KEYS.MONETDB_SERVER.toString()), 
+				50000, 
+				config.getProperty(CONFIG_KEYS.MONETDB_USER.toString()), 
+				config.getProperty(CONFIG_KEYS.MONETDB_PASSWORD.toString())
+			);
+			
+			if (warnList != null && warnList.size() > 0) {
+				for (String warning : warnList) {
+					log.error(warning);
+				}
+				
+				log.error("Unable to setup direct connection with MonetDB server");
+				monetDbServer.close();
+				monetDbServer = null;
+			
+			} else {			
+				log.info("Direct connection opened");
+			}
+		} catch (Exception e) {
+			log.error("Unable to setup direct connection with MonetDB server");
+			
+			monetDbServer.close();
+			monetDbServer = null;
+		}
+		
 	}
 	
 	protected void closeConnections () {
@@ -608,12 +703,17 @@ public class CopyTool {
 		try {
 			if (monetDbConn != null && monetDbConn.isClosed() == false) {
 				monetDbConn.close();
-				log.info("Closed connection to MonetDB server");
+				log.info("Closed JDBC connection to MonetDB server");
 			}
 		} catch (SQLException e) {
 			// don't care about this exception
 			log.warn("Unable to close connection to MonetDB server", e);
-		}		
+		}
+		
+		if (monetDbServer != null) {
+			monetDbServer.close();
+			log.info("Closed direct connection to MonetDB server");
+		}
 	}
 
 	/**
