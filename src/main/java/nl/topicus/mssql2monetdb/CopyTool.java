@@ -328,8 +328,6 @@ public class CopyTool {
 				precision = 18;
 
 			createSql.append(" (" + precision + ", " + scale + ")");
-		} else if (colTypeName.equals("double")) {
-			createSql.append("[" + metaData.getPrecision(colIndex) + "]");
 		}
 		
 		createSql.append(" ");
@@ -386,7 +384,10 @@ public class CopyTool {
 					String valueStr = value.toString();
 				
 					// escape ' with \' and escape \ with \\
-					valueStr = valueStr.replaceAll("\\\\", "\\\\\\\\").replaceAll("'", "\\\\'");
+					valueStr = valueStr.replaceAll("\\\\", "\\\\\\\\");
+					
+					// escape " with \"
+					valueStr = valueStr.replaceAll("\"",  "\\\"");
 				
 					out.write("\"" + valueStr + "\"");
 				}
