@@ -284,24 +284,20 @@ public class CopyTool {
 		createSql.append(colTypeName);
 		
 		// some types required additional info
-		switch(colTypeName) {
-			case "char":
-			case "character":
-			case "varchar":
-			case "character varying":
-				createSql.append(" (" + metaData.getColumnDisplaySize(colIndex) + ")");
-				break;
-			case "decimal":
-			case "numeric":			
-				// MonetDB doesn't support a precision higher than 18
-				if (precision > 18)
-					precision = 18;
-				
-				createSql.append(" (" + precision + ", " + scale + ")");
-				break;
-			case "double":
-				createSql.append("[" + metaData.getPrecision(colIndex) + "]");
-				break;
+		if (colTypeName.equals("char") || colTypeName.equals("character")
+				|| colTypeName.equals("varchar")
+				|| colTypeName.equals("character varying")) {
+			createSql.append(" (" + metaData.getColumnDisplaySize(colIndex)
+					+ ")");
+		} else if (colTypeName.equals("decimal")
+				|| colTypeName.equals("numeric")) {
+			// MonetDB doesn't support a precision higher than 18
+			if (precision > 18)
+				precision = 18;
+
+			createSql.append(" (" + precision + ", " + scale + ")");
+		} else if (colTypeName.equals("double")) {
+			createSql.append("[" + metaData.getPrecision(colIndex) + "]");
 		}
 		
 		createSql.append(" ");
@@ -420,95 +416,7 @@ public class CopyTool {
 		
 		log.info("Finished copying data");			
 	}
-	
-	protected void copyOLDData(CopyTable table, ResultSet resultSet, ResultSetMetaData metaData, long rowCount) throws SQLException {
-		log.info("Copying data to table " + table.getToTableSql() + "...");
 		
-		// build insert SQL
-		StringBuilder insertSql = new StringBuilder("INSERT INTO ");
-		insertSql.append(table.getToTableSql());
-		insertSql.append(" (");
-		
-		String[] colNames = new String[metaData.getColumnCount()];
-		String[] values = new String[metaData.getColumnCount()];
-				
-		for(int i=1; i <= metaData.getColumnCount(); i++) {
-			String colName = metaData.getColumnName(i).toLowerCase();
-			colNames[i-1] = quoteMonetDbIdentifier(colName);
-			values[i-1] = "?";
-		}
-		
-		insertSql.append(StringUtils.join(colNames, ","));		
-		insertSql.append(")");
-		insertSql.append(" VALUES (");
-		insertSql.append(StringUtils.join(values, ","));
-		insertSql.append(")");
-
-		PreparedStatement insertStmt = monetDbConn.prepareStatement(insertSql.toString());
-		
-		DecimalFormat formatPerc = new DecimalFormat("#.#");
-		
-		int batchCount = 0;
-		long insertCount = 0;
-		while(resultSet.next()) {
-			for(int i=1; i <= metaData.getColumnCount(); i++) {
-				Object value = resultSet.getObject(i);
-				int sqlType = metaData.getColumnType(i);
-				
-				if (value == null) {
-					insertStmt.setNull(i, sqlType);
-				} else if (value instanceof String) {
-					insertStmt.setString(i,  (String) value);
-				} else if (value instanceof Integer) {
-					insertStmt.setInt(i,  (Integer) value);
-				} else if (value instanceof BigDecimal) {
-					BigDecimal x = (BigDecimal) value;
-					if (x.scale() == 0) {
-						insertStmt.setLong(i, x.longValue());
-					} else {
-						insertStmt.setDouble(i,  x.doubleValue());
-					}
-				} else if (value instanceof Long) {
-					insertStmt.setLong(i,  (Long) value);
-				} else {
-					throw new SQLException("Unknown value type: " + value.getClass().getName());
-				}
-				
-			}
-					
-			insertStmt.addBatch();
-			batchCount++;
-			
-			if (batchCount % this.getBatchSize() == 0) {
-				log.info("Inserting next batch of " + this.getBatchSize() + " records...");
-				
-				insertStmt.executeBatch();
-				insertStmt.clearBatch();
-				insertCount = insertCount + batchCount;
-				batchCount = 0;
-				
-				log.info("Batch inserted");
-				float perc = ((float)insertCount / (float)rowCount) * 100;
-				log.info("Progress: " + insertCount + " out of " + rowCount + " (" + formatPerc.format(perc) + "%)");
-			}
-		}
-		
-		if (batchCount > 0) {
-			log.info("Inserting final batch of " + batchCount + " records...");
-			
-			insertStmt.executeBatch();
-			insertStmt.clearBatch();
-			insertCount = insertCount + batchCount;
-			
-			log.info("Batch inserted");
-			float perc = ((float)insertCount / (float)rowCount) * 100;
-			log.info("Progress: " + insertCount + " out of " + rowCount + " (" + formatPerc.format(perc) + "%)");
-		}
-		
-		
-		log.info("Finished copying data");		
-	}
-	
 	protected void validateConfig () {	
 		boolean isMissing = false;
 		
@@ -557,23 +465,18 @@ public class CopyTool {
 			
 			CopyTable table = tablesToCopy.get(id);
 			
-			switch(key) {
-				case "from":
-					table.setFromName(propValue);
-					break;
-				case "to":
-					table.setToName(propValue.toLowerCase());
-					break;
-				case "create":
-					table.setCreate(boolValue);
-					break;
-				case "truncate":
-					table.setTruncate(boolValue);
-					break;	
-				case "schema":
-					table.setSchema(propValue);
-					break;
+			if (key.equals("from")) {
+				table.setFromName(propValue);
+			} else if (key.equals("to")) {
+				table.setToName(propValue.toLowerCase());
+			} else if (key.equals("create")) {
+				table.setCreate(boolValue);
+			} else if (key.equals("truncate")) {
+				table.setTruncate(boolValue);
+			} else if (key.equals("schema")) {
+				table.setSchema(propValue);
 			}
+
 		}
 		
 		// verify each specified has a from and to name
