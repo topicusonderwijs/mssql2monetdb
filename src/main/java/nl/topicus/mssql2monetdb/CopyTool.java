@@ -129,7 +129,7 @@ public class CopyTool {
 		// copy data
 		try {
 			copyData(table, resultSet, metaData, rowCount);
-		} catch (BatchUpdateException e) {
+		} catch (SQLException e) {
 			log.error("Copying data failed", e);
 			
 			// print full chain of exceptions
