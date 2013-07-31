@@ -12,6 +12,8 @@ public class CopyTable {
 	private boolean truncate = false;
 	
 	private boolean create = true;
+	
+	private boolean drop = false;
 
 	public void setFromName(String fromName) {
 		this.fromName = fromName;
@@ -35,6 +37,14 @@ public class CopyTable {
 	
 	public String getSchema () {
 		return this.schema;
+	}
+	
+	public void setDrop (boolean drop) {
+		this.drop = drop;
+	}
+	
+	public boolean drop () {
+		return this.drop;
 	}
 	
 	public void setTruncate (boolean truncate) {

@@ -162,6 +162,14 @@ public class CopyTool {
 			throw new SQLException("Table " + table.getToTableSql() + " does not exist in MonetDB database and auto-create is set to false");
 		}
 		
+		// need to drop?
+		if (tableExists && table.drop()) {
+			log.info("Dropping table " + table.getToTableSql() + " in MonetDB database...");
+			q.executeUpdate("DROP TABLE " + table.getToTableSql());
+			tableExists = false;
+			log.info("Table dropped");
+		}
+		
 		if (tableExists) {
 			// verify table is as expected
 			this.verifyExistingTable(table, metaData);
@@ -341,10 +349,6 @@ public class CopyTool {
 		insertSql.append(StringUtils.join(colNames, ","));		
 		insertSql.append(")");
 		insertSql.append(" VALUES (");
-		
-		/*insertSql.append(StringUtils.join(values, ","));
-		insertSql.append(")");
-		*/
 
 		Statement insertStmt = monetDbConn.createStatement();
 		
@@ -475,6 +479,8 @@ public class CopyTool {
 				table.setTruncate(boolValue);
 			} else if (key.equals("schema")) {
 				table.setSchema(propValue);
+			} else if (key.equals("drop")) {
+				table.setDrop(boolValue);
 			}
 
 		}
