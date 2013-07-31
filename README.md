@@ -12,4 +12,6 @@ Make a single jar with embedded dependencies.
 `$ mvn clean compile assembly:single`
 
 Run.
-`$ java -jar target/mssql2monetdb-0.1-SNAPSHOT-jar-with-dependencies.jar`
+`$ java -jar target/mssql2monetdb-0.1-SNAPSHOT-jar-with-dependencies.jar -c config.properties`
+
+See the sample.config.properties file for an example of how the config file should like.
