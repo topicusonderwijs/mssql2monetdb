@@ -2,12 +2,8 @@ package nl.topicus.mssql2monetdb;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.math.BigDecimal;
-import java.sql.BatchUpdateException;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -361,6 +357,9 @@ public class CopyTool {
 		
 		monetDbConn.setAutoCommit(false);
 		
+		long startTime = System.currentTimeMillis();
+		long totalTime = 0;
+		
 		int batchCount = 0;
 		long insertCount = 0;
 		while(resultSet.next()) {			
@@ -396,13 +395,21 @@ public class CopyTool {
 				insertStmt.executeBatch();
 				monetDbConn.commit();
 				
+				totalTime = System.currentTimeMillis() - startTime;
+				
 				insertStmt.clearBatch();
 				insertCount = insertCount + batchCount;
 				batchCount = 0;
 				
+				// how much time for current inserted records?
+				float timePerRecord = (float)(totalTime/1000) / (float)insertCount;				
+				
+				long timeLeft = Float.valueOf((rowCount - insertCount) * timePerRecord).longValue();
+				
 				log.info("Batch inserted");
 				float perc = ((float)insertCount / (float)rowCount) * 100;
 				log.info("Progress: " + insertCount + " out of " + rowCount + " (" + formatPerc.format(perc) + "%)");
+				log.info("Time: " + (totalTime/1000) + " seconds spent; estimated time left is " + timeLeft + " seconds");
 			}
 		}
 		
