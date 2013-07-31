@@ -51,6 +51,8 @@ public class CopyTool {
 	
 	private int batchSize = DEFAULT_BATCH_SIZE;
 	
+	private DecimalFormat formatPerc = new DecimalFormat("#.#");
+	
 	public static String prepareMonetDbIdentifier (String ident) {
 		// MonetDB only supports lowercase identifiers
 		ident = ident.toLowerCase();
@@ -134,7 +136,11 @@ public class CopyTool {
 		
 		// copy data
 		if (table.getCopyMethod() == CopyTable.COPY_METHOD_COPYINTO && monetDbServer != null) {
-			//copyDataWithCopyInto(table, resultSet, metaData, rowCount);	
+			try {
+				copyDataWithCopyInto(table, resultSet, metaData, rowCount);
+			} catch (Exception e) {
+				log.error("Copying data failed", e);
+			}	
 		} else {
 			try {
 				copyData(table, resultSet, metaData, rowCount);
@@ -205,7 +211,7 @@ public class CopyTool {
 			log.info("Table created");
 			
 			// fresh table so we can use COPY INTO since we know its ok
-			//table.setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
+			table.setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
 		}
 	}
 	
@@ -367,16 +373,21 @@ public class CopyTool {
 	    out.write(query);
 	    out.newLine();
 	    
+	    long startTime = System.currentTimeMillis();
+		long insertCount = 0;
+		
 	    while(resultSet.next()) {
 	    	for(int i=1; i <= metaData.getColumnCount(); i++) {
 				Object value = resultSet.getObject(i);
-				String valueStr = value.toString();
-				
-				// TODO: escape " with \" and escape \ with \\
 				
 				if (value == null) {
 					out.write("");
 				} else {				
+					String valueStr = value.toString();
+				
+					// escape ' with \' and escape \ with \\
+					valueStr = valueStr.replaceAll("\\\\", "\\\\\\\\").replaceAll("'", "\\\\'");
+				
 					out.write("\"" + valueStr + "\"");
 				}
 				
@@ -386,9 +397,27 @@ public class CopyTool {
 	    	}
 	    	
 	    	// record separator
-	    	out.newLine();	    	
+	    	out.newLine();	   
+	    	insertCount++;
+	    	
+	    	if (insertCount % 100000 == 0) {
+	    		printInsertProgress(startTime, insertCount, rowCount);	
+	    	}
 	    }
+	    out.writeLine("");
 		
+	    error = in.waitForPrompt();
+	    if (error != null)
+	    	throw new Exception(error);
+	    
+	    out.writeLine(""); // server wants more, we're going to tell it, this is it
+	    
+	    error = in.waitForPrompt();
+	    if (error != null)
+	    	throw new Exception(error);
+	    
+	    printInsertProgress(startTime, insertCount, rowCount);	
+	    
 		log.info("Finished copying data");
 	}
 	
@@ -413,13 +442,10 @@ public class CopyTool {
 		insertSql.append(" VALUES (");
 
 		Statement insertStmt = monetDbConn.createStatement();
-		
-		DecimalFormat formatPerc = new DecimalFormat("#.#");
-		
+				
 		monetDbConn.setAutoCommit(false);
 		
 		long startTime = System.currentTimeMillis();
-		long totalTime = 0;
 		
 		int batchCount = 0;
 		long insertCount = 0;
@@ -455,22 +481,12 @@ public class CopyTool {
 				
 				insertStmt.executeBatch();
 				monetDbConn.commit();
-				
-				totalTime = System.currentTimeMillis() - startTime;
-				
+
 				insertStmt.clearBatch();
 				insertCount = insertCount + batchCount;
-				batchCount = 0;
+				batchCount = 0;				
 				
-				// how much time for current inserted records?
-				float timePerRecord = (float)(totalTime/1000) / (float)insertCount;				
-				
-				long timeLeft = Float.valueOf((rowCount - insertCount) * timePerRecord).longValue();
-				
-				log.info("Batch inserted");
-				float perc = ((float)insertCount / (float)rowCount) * 100;
-				log.info("Progress: " + insertCount + " out of " + rowCount + " (" + formatPerc.format(perc) + "%)");
-				log.info("Time: " + (totalTime/1000) + " seconds spent; estimated time left is " + timeLeft + " seconds");
+				printInsertProgress(startTime, insertCount, rowCount);				
 			}
 		}
 		
@@ -483,15 +499,27 @@ public class CopyTool {
 			insertStmt.clearBatch();
 			insertCount = insertCount + batchCount;
 			
-			log.info("Batch inserted");
-			float perc = ((float)insertCount / (float)rowCount) * 100;
-			log.info("Progress: " + insertCount + " out of " + rowCount + " (" + formatPerc.format(perc) + "%)");
+			printInsertProgress(startTime, insertCount, rowCount);			
 		}
 		
 		
 		monetDbConn.setAutoCommit(true);
 		
 		log.info("Finished copying data");			
+	}
+	
+	protected void printInsertProgress(long startTime, long insertCount, long rowCount) {
+		long totalTime = System.currentTimeMillis() - startTime;
+		
+		// how much time for current inserted records?
+		float timePerRecord = (float)(totalTime/1000) / (float)insertCount;				
+		
+		long timeLeft = Float.valueOf((rowCount - insertCount) * timePerRecord).longValue();
+		
+		log.info("Records inserted");
+		float perc = ((float)insertCount / (float)rowCount) * 100;
+		log.info("Progress: " + insertCount + " out of " + rowCount + " (" + formatPerc.format(perc) + "%)");
+		log.info("Time: " + (totalTime/1000) + " seconds spent; estimated time left is " + timeLeft + " seconds");
 	}
 		
 	protected void validateConfig () {	
