@@ -131,8 +131,13 @@ public class CopyTool {
 			copyData(table, resultSet, metaData, rowCount);
 		} catch (BatchUpdateException e) {
 			log.error("Copying data failed", e);
-			log.error(e.getNextException());
-			e.getNextException().printStackTrace();
+			
+			// print full chain of exceptions
+			SQLException nextException = e.getNextException();
+			while(nextException != null) {
+				nextException.printStackTrace();
+				nextException = nextException.getNextException();
+			}
 		}
 		
 		// close everything again
