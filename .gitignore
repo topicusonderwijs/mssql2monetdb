@@ -5,7 +5,7 @@
 target/
 logs/
 
-.properties
+*.properties
 
 # OS generated files #
 ######################
