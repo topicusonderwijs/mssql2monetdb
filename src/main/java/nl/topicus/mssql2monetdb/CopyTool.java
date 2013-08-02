@@ -608,10 +608,15 @@ public class CopyTool {
 				Properties connProps = new Properties();
 				String user = config.getProperty(CONFIG_KEYS.MSSQL_USER.toString());
 				String password = config.getProperty(CONFIG_KEYS.MSSQL_PASSWORD.toString());
+				String instance = config.getProperty(CONFIG_KEYS.MSSQL_PASSWORD.toString());
 				
 				if (StringUtils.isEmpty(user) == false && StringUtils.isEmpty(password) == false) {
 					connProps.setProperty("user",  user);
 					connProps.setProperty("password", password);
+				}
+				
+				if(StringUtils.isEmpty(instance) == false){
+					connProps.setProperty("instance", instance);
 				}
 				
 				String url = "jdbc:jtds:sqlserver://" + 

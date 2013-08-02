@@ -5,6 +5,7 @@ public enum CONFIG_KEYS {
 	MSSQL_PASSWORD ("mssql.password"),
 	MSSQL_SERVER ("mssql.server"),
 	MSSQL_DATABASE ("mssql.database"),
+	MSSQL_INSTANCE ("mssql.instance"),
 	MONETDB_USER ("monetdb.user"),
 	MONETDB_PASSWORD ("monetdb.password"),
 	MONETDB_SERVER ("monetdb.server"),
