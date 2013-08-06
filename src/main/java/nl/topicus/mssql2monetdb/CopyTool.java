@@ -370,32 +370,36 @@ public class CopyTool {
 	    
 	    long startTime = System.currentTimeMillis();
 		long insertCount = 0;
+		int columnCount = metaData.getColumnCount();
 		
-	    while(resultSet.next()) {
-	    	for(int i=1; i <= metaData.getColumnCount(); i++) {
+	    while(resultSet.next()) {    	
+	    	for(int i=1; i <= columnCount; i++) {
 				Object value = resultSet.getObject(i);
+				String valueStr = "";
 				
 				if (value == null) {
-					out.write("");
+					valueStr = "";
 				} else {				
-					String valueStr = value.toString();
+					valueStr = value.toString();
 				
-					// escape ' with \' and escape \ with \\
+					// escape \ with \\
 					valueStr = valueStr.replaceAll("\\\\", "\\\\\\\\");
 					
 					// escape " with \"
-					valueStr = valueStr.replaceAll("\"",  "\\\"");
-				
-					out.write("\"" + valueStr + "\"");
+					valueStr = valueStr.replaceAll("\"",  "\\\\\"");					
 				}
 				
+				out.write("\"" + valueStr + "\"");
+				
 				// column separator (not for last column)
-				if (i < metaData.getColumnCount())
-					out.write(",");				
+				if (i < columnCount) {
+					out.write(",");		
+				}
 	    	}
 	    	
 	    	// record separator
 	    	out.newLine();	   
+	    	
 	    	insertCount++;
 	    	
 	    	if (insertCount % 100000 == 0) {
