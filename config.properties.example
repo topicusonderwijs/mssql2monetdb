@@ -5,6 +5,8 @@ mssql.user = dbuser
 mssql.password = dbpassword
 mssql.server = localhost
 mssql.database = my_db
+# optional instance name
+# mssql.instance = instance_name
 
 monetdb.user = monetdb
 monetdb.password = monetdb
