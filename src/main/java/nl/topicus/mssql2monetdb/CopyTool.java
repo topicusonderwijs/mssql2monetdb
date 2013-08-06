@@ -2,7 +2,6 @@ package nl.topicus.mssql2monetdb;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -19,11 +18,9 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 
-import nl.cwi.monetdb.mcl.MCLException;
 import nl.cwi.monetdb.mcl.io.BufferedMCLReader;
 import nl.cwi.monetdb.mcl.io.BufferedMCLWriter;
 import nl.cwi.monetdb.mcl.net.MapiSocket;
-import nl.cwi.monetdb.mcl.parser.MCLParseException;
 
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
@@ -405,6 +402,10 @@ public class CopyTool {
 	    		printInsertProgress(startTime, insertCount, rowCount);	
 	    	}
 	    }
+	    printInsertProgress(startTime, insertCount, rowCount);	
+	    
+	    log.info("Finalising COPY INTO... this may take a while!");
+	    
 	    out.writeLine("");
 		
 	    error = in.waitForPrompt();
@@ -416,9 +417,7 @@ public class CopyTool {
 	    error = in.waitForPrompt();
 	    if (error != null)
 	    	throw new Exception(error);
-	    
-	    printInsertProgress(startTime, insertCount, rowCount);	
-	    
+	    	    
 		log.info("Finished copying data");
 	}
 	
