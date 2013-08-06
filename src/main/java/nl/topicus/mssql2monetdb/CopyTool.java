@@ -637,7 +637,7 @@ public class CopyTool {
 				Properties connProps = new Properties();
 				String user = config.getProperty(CONFIG_KEYS.MSSQL_USER.toString());
 				String password = config.getProperty(CONFIG_KEYS.MSSQL_PASSWORD.toString());
-				String instance = config.getProperty(CONFIG_KEYS.MSSQL_PASSWORD.toString());
+				String instance = config.getProperty(CONFIG_KEYS.MSSQL_INSTANCE.toString());
 				
 				if (StringUtils.isEmpty(user) == false && StringUtils.isEmpty(password) == false) {
 					connProps.setProperty("user",  user);
