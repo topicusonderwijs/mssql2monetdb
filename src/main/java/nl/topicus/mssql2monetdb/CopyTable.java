@@ -1,93 +1,124 @@
 package nl.topicus.mssql2monetdb;
 
-import org.apache.commons.lang.StringUtils;
+import java.util.ArrayList;
+import java.util.List;
 
-public class CopyTable {
+/**
+ * The global CopyTables object which contains the configuration for a table that needs to
+ * be copied like which copy method should be used, but also contains {@link MonetDBTable}
+ * s which is usually one, but can also contain a temporary table definition in case of
+ * replaceTempTable.
+ * 
+ * @author bloemendal
+ */
+public class CopyTable
+{
 	public static final int COPY_METHOD_INSERT = 0;
-	
+
 	public static final int COPY_METHOD_COPYINTO = 1;
-	
-	private String fromName;
-	
-	private String toName;
-	
-	private String schema;
-	
+
+	// contains the actual result table and possible a temp table
+	private List<MonetDBTable> monetDBTables = new ArrayList<MonetDBTable>();
+
 	private boolean truncate = false;
-	
+
 	private boolean create = true;
-	
+
 	private boolean drop = false;
-	
+
 	private int copyMethod = COPY_METHOD_INSERT;
 
-	public void setFromName(String fromName) {
-		this.fromName = fromName;
-	}
-	
-	public void setCopyMethod(int copyMethod) {
+	private boolean copyViaTempTable = false;
+
+	private String tempTablePrefix = "";
+
+	public void setCopyMethod(int copyMethod)
+	{
 		this.copyMethod = copyMethod;
 	}
-	
-	public int getCopyMethod () {
+
+	public int getCopyMethod()
+	{
 		return this.copyMethod;
 	}
-	
-	public String getFromName() {
-		return this.fromName;
-	}
-	
-	public void setToName (String toName) {
-		this.toName = toName;
-	}
-	
-	public String getToName () {
-		return this.toName;
-	}
-	
-	public void setSchema(String schema) {
-		this.schema = schema;
-	}
-	
-	public String getSchema () {
-		return this.schema;
-	}
-	
-	public void setDrop (boolean drop) {
+
+	public void setDrop(boolean drop)
+	{
 		this.drop = drop;
 	}
-	
-	public boolean drop () {
+
+	public boolean drop()
+	{
 		return this.drop;
 	}
-	
-	public void setTruncate (boolean truncate) {
+
+	public void setTruncate(boolean truncate)
+	{
 		this.truncate = truncate;
 	}
-	
-	public boolean truncate () {
+
+	public boolean truncate()
+	{
 		return this.truncate;
 	}
-	
-	public void setCreate (boolean create) {
+
+	public void setCreate(boolean create)
+	{
 		this.create = create;
 	}
-	
-	public boolean create () {
+
+	public boolean create()
+	{
 		return this.create;
 	}
-	
-	public String getToTableSql () {
-		String sql = "";
-		
-		if (StringUtils.isEmpty(schema) == false) {
-			sql = CopyTool.quoteMonetDbIdentifier(schema);
-			sql = sql + ".";
-		}
-		
-		sql = sql + CopyTool.quoteMonetDbIdentifier(toName);
-		
-		return sql;
+
+	public List<MonetDBTable> getMonetDBTables()
+	{
+		return monetDBTables;
 	}
 
+	public void setMonetDBTables(List<MonetDBTable> monetDBTables)
+	{
+		this.monetDBTables = monetDBTables;
+	}
+
+	public boolean isCopyViaTempTable()
+	{
+		return copyViaTempTable;
+	}
+
+	public void setCopyViaTempTable(boolean copyViaTempTable)
+	{
+		this.copyViaTempTable = copyViaTempTable;
+	}
+
+	public String getTempTablePrefix()
+	{
+		return tempTablePrefix;
+	}
+
+	public void setTempTablePrefix(String tempTablePrefix)
+	{
+		this.tempTablePrefix = tempTablePrefix;
+	}
+
+	public MonetDBTable getResultTable()
+	{
+		for (MonetDBTable table : monetDBTables)
+			if (!table.isTempTable())
+				return table;
+
+		return null;
+	}
+
+	public MonetDBTable getTempTable()
+	{
+		for (MonetDBTable table : monetDBTables)
+		{
+			if (table.isTempTable())
+				return table;
+		}
+
+		return null;
+	}
 }
