@@ -19,3 +19,5 @@ table.example.to = example_table_new
 table.example.schema = sys
 table.example.create = true
 table.example.truncate = true
+table.example.copyViaTempTable = true
+table.example.tempTablePrefix = tmp_
