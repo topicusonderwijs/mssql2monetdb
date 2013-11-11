@@ -28,8 +28,11 @@ public class CopyTable
 
 	private int copyMethod = COPY_METHOD_INSERT;
 
+	// copies the table to a temp table and then replaces the 'to' table with the temp
+	// table to reduce down-time
 	private boolean copyViaTempTable = false;
 
+	// prefix of the temp table that is created
 	private String tempTablePrefix = "";
 
 	public void setCopyMethod(int copyMethod)
