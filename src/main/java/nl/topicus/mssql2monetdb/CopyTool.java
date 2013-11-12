@@ -146,12 +146,16 @@ public class CopyTool
 			{
 				try
 				{
+					// backup table if configured
+					if (table.isBackup())
+						backupTable(table.getResultTable());
+
+					// copy new data to monetdb
 					copyTable(table);
 				}
 				catch (SQLException e)
 				{
-					LOG.error("Unable to copy data from table '"
-						+ table.getResultTable().getFromName() + "'", e);
+					LOG.error("Unable to copy data from table '" + table.getFromName() + "'", e);
 				}
 			}
 
@@ -165,32 +169,284 @@ public class CopyTool
 		LOG.info("Finished!");
 	}
 
-	public int getBatchSize()
+	protected void openConnections()
 	{
-		return this.batchSize;
+		// make sure JDBC drivers are loaded
+		try
+		{
+			Class.forName("nl.cwi.monetdb.jdbc.MonetDriver");
+		}
+		catch (ClassNotFoundException e)
+		{
+			LOG.fatal("Unable to load MonetDB JDBC driver");
+			System.exit(1);
+		}
+
+		try
+		{
+			Class.forName("net.sourceforge.jtds.jdbc.Driver");
+		}
+		catch (ClassNotFoundException e)
+		{
+			LOG.fatal("Unable to load MS SQL jTDS JDBC driver");
+			System.exit(1);
+		}
+
+		try
+		{
+			if (mssqlConn == null || mssqlConn.isClosed())
+			{
+				Properties connProps = new Properties();
+				String user = config.getProperty(CONFIG_KEYS.MSSQL_USER.toString());
+				String password = config.getProperty(CONFIG_KEYS.MSSQL_PASSWORD.toString());
+				String instance = config.getProperty(CONFIG_KEYS.MSSQL_INSTANCE.toString());
+
+				if (StringUtils.isEmpty(user) == false && StringUtils.isEmpty(password) == false)
+				{
+					connProps.setProperty("user", user);
+					connProps.setProperty("password", password);
+				}
+
+				if (StringUtils.isEmpty(instance) == false)
+				{
+					connProps.setProperty("instance", instance);
+				}
+
+				String url =
+					"jdbc:jtds:sqlserver://"
+						+ config.getProperty(CONFIG_KEYS.MSSQL_SERVER.toString()) + "/"
+						+ config.getProperty(CONFIG_KEYS.MSSQL_DATABASE.toString());
+				LOG.info("Using connection URL for MS SQL Server: " + url);
+
+				mssqlConn = DriverManager.getConnection(url, connProps);
+				LOG.info("Opened connection to MS SQL Server");
+			}
+		}
+		catch (SQLException e)
+		{
+			LOG.fatal("Unable to open connection to MS SQL server", e);
+			System.exit(1);
+		}
+
+		try
+		{
+			if (monetDbConn == null || monetDbConn.isClosed())
+			{
+				Properties connProps = new Properties();
+				String user = config.getProperty(CONFIG_KEYS.MONETDB_USER.toString());
+				String password = config.getProperty(CONFIG_KEYS.MONETDB_PASSWORD.toString());
+
+				if (StringUtils.isEmpty(user) == false && StringUtils.isEmpty(password) == false)
+				{
+					connProps.setProperty("user", user);
+					connProps.setProperty("password", password);
+				}
+
+				String url =
+					"jdbc:monetdb://" + config.getProperty(CONFIG_KEYS.MONETDB_SERVER.toString())
+						+ "/" + config.getProperty(CONFIG_KEYS.MONETDB_DATABASE.toString());
+				LOG.info("Using connection URL for MonetDB Server: " + url);
+
+				monetDbConn = DriverManager.getConnection(url, connProps);
+				LOG.info("Opened connection to MonetDB Server");
+			}
+		}
+		catch (SQLException e)
+		{
+			LOG.fatal("Unable to open connection to MonetDB server", e);
+			closeConnections();
+			System.exit(1);
+		}
+
+		monetDbServer = new MapiSocket();
+
+		monetDbServer.setDatabase(config.getProperty(CONFIG_KEYS.MONETDB_DATABASE.toString()));
+		monetDbServer.setLanguage("sql");
+
+		try
+		{
+			LOG.info("Opening direct connection to MonetDB server...");
+			List<String> warnList =
+				monetDbServer.connect(config.getProperty(CONFIG_KEYS.MONETDB_SERVER.toString()),
+					50000, config.getProperty(CONFIG_KEYS.MONETDB_USER.toString()),
+					config.getProperty(CONFIG_KEYS.MONETDB_PASSWORD.toString()));
+
+			if (warnList != null && warnList.size() > 0)
+			{
+				for (String warning : warnList)
+				{
+					LOG.error(warning);
+				}
+
+				LOG.error("Unable to setup direct connection with MonetDB server");
+				monetDbServer.close();
+				monetDbServer = null;
+
+			}
+			else
+			{
+				LOG.info("Direct connection opened");
+			}
+		}
+		catch (Exception e)
+		{
+			LOG.error("Unable to setup direct connection with MonetDB server");
+
+			monetDbServer.close();
+			monetDbServer = null;
+		}
+
 	}
 
+	protected HashMap<String, CopyTable> findTablesToCopy(Properties config)
+	{
+		HashMap<String, CopyTable> tablesToCopy = new HashMap<String, CopyTable>();
+		for (Entry<Object, Object> entry : config.entrySet())
+		{
+			String propName = entry.getKey().toString().toLowerCase();
+			String propValue = entry.getValue().toString();
+			boolean boolValue =
+				(propValue.equalsIgnoreCase("true") || propValue.equalsIgnoreCase("yes"));
+
+			String[] split = propName.split("\\.");
+
+			if (split.length != 3)
+				continue;
+
+			if (split[0].equals("table") == false)
+				continue;
+
+			String id = split[1];
+			String key = split[2].toLowerCase();
+
+			CopyTable table = tablesToCopy.get(id);
+			// if table does not exist than add new CopyTable with a MonetDBTable
+			if (table == null)
+			{
+				table = new CopyTable();
+				table.getMonetDBTables().add(new MonetDBTable(table));
+			}
+
+			if (key.equals("from"))
+			{
+				table.setFromName(propValue);
+			}
+			else if (key.equals("to"))
+			{
+				table.getResultTable().setName(propValue.toLowerCase());
+			}
+			else if (key.equals("schema"))
+			{
+				table.getResultTable().setSchema(propValue);
+			}
+			else if (key.equals("create"))
+			{
+				table.setCreate(boolValue);
+			}
+			else if (key.equals("truncate"))
+			{
+				table.setTruncate(boolValue);
+			}
+			else if (key.equals("drop"))
+			{
+				table.setDrop(boolValue);
+			}
+			else if (key.equals("copyviatemptable"))
+			{
+				table.setCopyViaTempTable(boolValue);
+			}
+			else if (key.equals("temptableprefix"))
+			{
+				table.setTempTablePrefix(propValue);
+			}
+			else if (key.equals("backup"))
+			{
+				table.setBackup(boolValue);
+			}
+
+			tablesToCopy.put(id, table);
+		}
+
+		// verify each specified has a from and to name and add temp tables
+		// and add temptable configuration if copyViaTempTable
+		Iterator<Entry<String, CopyTable>> iter = tablesToCopy.entrySet().iterator();
+		while (iter.hasNext())
+		{
+			Entry<String, CopyTable> entry = iter.next();
+			String id = entry.getKey();
+			CopyTable table = entry.getValue();
+			if (table.getResultTable() == null)
+			{
+				LOG.error("Configuration for '" + id + "' is missing a result table");
+				iter.remove();
+				continue;
+			}
+
+			if (StringUtils.isEmpty(table.getFromName()))
+			{
+				LOG.error("Configuration for '" + id + "' is missing name of from table");
+				iter.remove();
+				continue;
+			}
+
+			if (StringUtils.isEmpty(table.getResultTable().getName()))
+			{
+				LOG.warn("Configuration for '" + id
+					+ "' is missing name of to table. Using name of from table ("
+					+ table.getFromName() + ")");
+				table.getResultTable().setName(table.getFromName());
+			}
+
+			if (table.isCopyViaTempTable() && table.getTempTable() == null)
+			{
+				MonetDBTable tempTable = new MonetDBTable(table);
+				tempTable.setTempTable(true);
+				// toName = tempTablePrefix + toName
+				tempTable.setName(table.getTempTablePrefix() + table.getResultTable().getName());
+				table.getMonetDBTables().add(tempTable);
+			}
+		}
+
+		if (tablesToCopy.size() == 0)
+		{
+			LOG.error("Configuration has specified NO tables to copy!");
+		}
+		else
+		{
+			LOG.info("The following tables will be copied: ");
+			for (CopyTable table : tablesToCopy.values())
+			{
+				LOG.info("* " + table.getFromName() + " -> " + table.getResultTable().getName());
+			}
+		}
+
+		return tablesToCopy;
+	}
+
+	/**
+	 * Copy a MSSQL table to MonetDB. This will copy the MSSQL data to the result table or
+	 * a temporary table if configured that way. This includes auto-creating the necessary
+	 * tables and importing the data using selects or copy into.
+	 */
 	protected void copyTable(CopyTable table) throws SQLException
 	{
-		LOG.info("Starting with copy of table " + table.getResultTable().getFromName() + "...");
+		LOG.info("Starting with copy of table " + table.getFromName() + "...");
 
 		// select data from MS SQL Server
 		Statement selectStmt = mssqlConn.createStatement();
 
 		// get number of rows in table
 		ResultSet resultSet =
-			selectStmt.executeQuery("SELECT COUNT(*) FROM [" + table.getResultTable().getFromName()
-				+ "]");
+			selectStmt.executeQuery("SELECT COUNT(*) FROM [" + table.getFromName() + "]");
 		resultSet.next();
 
 		long rowCount = resultSet.getLong(1);
-		LOG.info("Found " + rowCount + " rows in table " + table.getResultTable().getFromName());
+		LOG.info("Found " + rowCount + " rows in table " + table.getFromName());
 
 		resultSet.close();
 
 		// get all data from table
-		resultSet =
-			selectStmt.executeQuery("SELECT * FROM [" + table.getResultTable().getFromName() + "]");
+		resultSet = selectStmt.executeQuery("SELECT * FROM [" + table.getFromName() + "]");
 
 		// get meta data (column info and such)
 		ResultSetMetaData metaData = resultSet.getMetaData();
@@ -204,7 +460,7 @@ public class CopyTool
 		// do truncate?
 		if (table.truncate())
 		{
-			truncateTable(copyToTable);
+			truncateMonetDBTable(copyToTable);
 		}
 
 		// copy data
@@ -243,69 +499,31 @@ public class CopyTool
 		resultSet.close();
 		selectStmt.close();
 
-		LOG.info("Finished copy of table " + table.getResultTable().getFromName());
+		LOG.info("Finished copy of table " + table.getFromName());
 	}
 
-	private void copyTempTableToResultTable()
+	/**
+	 * Backup a table by copying the data into a backup table named backup_resultTable by
+	 * resultTable and metaData of the MSSQL table that is copied.
+	 * 
+	 * @throws SQLException
+	 */
+	protected void backupTable(MonetDBTable resultTable) throws SQLException
 	{
-		// create table schema.temptable as select * from schema.resulttable with data;
-		LOG.info("Copying the temp table to the result table");
-		try
-		{
-			Statement q = monetDbConn.createStatement();
-			for (CopyTable copyTable : tablesToCopy.values())
-			{
-				if (copyTable.isCopyViaTempTable())
-				{
-					// drop result table before replacing with temp table
-					if (monetDBTableExists(copyTable.getResultTable()))
-					{
-						q.execute("DROP TABLE " + copyTable.getResultTable().getToTableSql());
-					}
-					q.execute("CREATE TABLE " + copyTable.getResultTable().getToTableSql()
-						+ " AS SELECT * FROM " + copyTable.getTempTable().getToTableSql()
-						+ " WITH DATA");
-					// drop temp table, we wont need it anymore
-					q.execute("DROP TABLE " + copyTable.getTempTable().getToTableSql());
-				}
-			}
-		}
-		catch (SQLException e)
-		{
-			LOG.error("Error copying temp table to result tabel", e);
-		}
-		LOG.info("Finished copying the temp table to the result table");
-	}
-
-	private boolean monetDBTableExists(MonetDBTable monetDBTable) throws SQLException
-	{
-		boolean tableExists = true;
-		try
-		{
-			Statement q = monetDbConn.createStatement();
-			q.executeQuery("SELECT * FROM " + monetDBTable.getToTableSql() + " LIMIT 1");
-		}
-		catch (SQLException e)
-		{
-			if (e.getMessage().indexOf("no such table") > -1)
-			{
-				// ok, so does not exist
-				tableExists = false;
-			}
-			else
-			{
-				throw e;
-			}
-		}
-
-		return tableExists;
+		// create a MonetDBTable object for the backup table
+		MonetDBTable backupTable = new MonetDBTable(resultTable.getCopyTable());
+		backupTable.setSchema(resultTable.getSchema());
+		backupTable.setName("backup_" + resultTable.getName());
+		// drop and recreate backup table regardless if it exists
+		dropMonetDBTable(backupTable);
+		// copy from resulttable to backup table
+		copyMonetDBTableToNewMonetDBTable(resultTable, backupTable);
 	}
 
 	protected void checkTableInMonetDb(MonetDBTable monetDBTable, ResultSetMetaData metaData)
 			throws SQLException
 	{
 		boolean tableExists = monetDBTableExists(monetDBTable);
-		Statement q = monetDbConn.createStatement();
 		// can't auto create?
 		if (tableExists == false && monetDBTable.getCopyTable().create() == false)
 		{
@@ -316,10 +534,8 @@ public class CopyTool
 		// need to drop?
 		if (tableExists && monetDBTable.getCopyTable().drop())
 		{
-			LOG.info("Dropping table " + monetDBTable.getToTableSql() + " in MonetDB database...");
-			q.executeUpdate("DROP TABLE " + monetDBTable.getToTableSql());
+			dropMonetDBTable(monetDBTable);
 			tableExists = false;
-			LOG.info("Table dropped");
 		}
 
 		if (tableExists)
@@ -329,26 +545,62 @@ public class CopyTool
 		}
 		else
 		{
-			// build SQL query to create table
-			LOG.info("Creating table " + monetDBTable.getToTableSql() + " on MonetDB server...");
-			StringBuilder createSql =
-				new StringBuilder("CREATE TABLE " + monetDBTable.getToTableSql() + " (");
-
-			for (int i = 1; i <= metaData.getColumnCount(); i++)
-			{
-				createSql.append(createColumnSql(i, metaData));
-				createSql.append(",");
-			}
-			createSql.deleteCharAt(createSql.length() - 1);
-			createSql.append(")");
-
-			// execute CREATE TABLE SQL query
-			q.execute(createSql.toString());
-			LOG.info("Table created");
-
-			// fresh table so we can use COPY INTO since we know its ok
-			monetDBTable.getCopyTable().setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
+			createMonetDBTable(monetDBTable, metaData);
 		}
+	}
+
+	protected void createMonetDBTable(MonetDBTable monetDBTable, ResultSetMetaData metaData)
+			throws SQLException
+	{
+		// build SQL query to create table
+		LOG.info("Creating table " + monetDBTable.getToTableSql() + " on MonetDB server...");
+		StringBuilder createSql =
+			new StringBuilder("CREATE TABLE " + monetDBTable.getToTableSql() + " (");
+
+		for (int i = 1; i <= metaData.getColumnCount(); i++)
+		{
+			createSql.append(createColumnSql(i, metaData));
+			createSql.append(",");
+		}
+		createSql.deleteCharAt(createSql.length() - 1);
+		createSql.append(")");
+
+		// execute CREATE TABLE SQL query
+		monetDbConn.createStatement().execute(createSql.toString());
+		LOG.info("Table created");
+
+		// fresh table so we can use COPY INTO since we know its ok
+		monetDBTable.getCopyTable().setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
+
+	}
+
+	protected void copyTempTableToResultTable()
+	{
+		// create table schema.temptable as select * from schema.resulttable with data;
+		LOG.info("Copying the temp table to the result table");
+		try
+		{
+			for (CopyTable copyTable : tablesToCopy.values())
+			{
+				if (copyTable.isCopyViaTempTable())
+				{
+					// drop result table before replacing with temp table
+					if (monetDBTableExists(copyTable.getResultTable()))
+					{
+						dropMonetDBTable(copyTable.getResultTable());
+					}
+					copyMonetDBTableToNewMonetDBTable(copyTable.getTempTable(),
+						copyTable.getResultTable());
+					// drop temp table, we wont need it anymore
+					dropMonetDBTable(copyTable.getTempTable());
+				}
+			}
+		}
+		catch (SQLException e)
+		{
+			LOG.error("Error copying temp table to result tabel", e);
+		}
+		LOG.info("Finished copying the temp table to the result table");
 	}
 
 	protected void verifyExistingTable(MonetDBTable table, ResultSetMetaData metaData)
@@ -501,16 +753,6 @@ public class CopyTool
 		}
 
 		return createSql.toString();
-	}
-
-	protected void truncateTable(MonetDBTable monetDBTable) throws SQLException
-	{
-		LOG.info("Truncating table " + monetDBTable.getToTableSql() + " on MonetDB server...");
-
-		Statement truncateStmt = monetDbConn.createStatement();
-		truncateStmt.execute("DELETE FROM " + monetDBTable.getToTableSql());
-
-		LOG.info("Table truncated");
 	}
 
 	protected void copyDataWithCopyInto(MonetDBTable monetDBTable, ResultSet resultSet,
@@ -668,9 +910,9 @@ public class CopyTool
 			insertStmt.addBatch(insertRecordSql.toString());
 			batchCount++;
 
-			if (batchCount % this.getBatchSize() == 0)
+			if (batchCount % batchSize == 0)
 			{
-				LOG.info("Inserting next batch of " + this.getBatchSize() + " records...");
+				LOG.info("Inserting next batch of " + batchSize + " records...");
 
 				insertStmt.executeBatch();
 				monetDbConn.commit();
@@ -753,257 +995,84 @@ public class CopyTool
 		}
 	}
 
-	protected HashMap<String, CopyTable> findTablesToCopy(Properties config)
+	private boolean monetDBTableExists(MonetDBTable monetDBTable) throws SQLException
 	{
-		HashMap<String, CopyTable> tablesToCopy = new HashMap<String, CopyTable>();
-		for (Entry<Object, Object> entry : config.entrySet())
-		{
-			String propName = entry.getKey().toString().toLowerCase();
-			String propValue = entry.getValue().toString();
-			boolean boolValue =
-				(propValue.equalsIgnoreCase("true") || propValue.equalsIgnoreCase("yes"));
-
-			String[] split = propName.split("\\.");
-
-			if (split.length != 3)
-				continue;
-
-			if (split[0].equals("table") == false)
-				continue;
-
-			String id = split[1];
-			String key = split[2].toLowerCase();
-
-			CopyTable table = tablesToCopy.get(id);
-			// if table does not exist than add new CopyTable with a MonetDBTable
-			if (table == null)
-			{
-				table = new CopyTable();
-				table.getMonetDBTables().add(new MonetDBTable(table));
-			}
-
-			if (key.equals("from"))
-			{
-				table.getResultTable().setFromName(propValue);
-			}
-			else if (key.equals("to"))
-			{
-				table.getResultTable().setToName(propValue.toLowerCase());
-			}
-			else if (key.equals("schema"))
-			{
-				table.getResultTable().setSchema(propValue);
-			}
-			else if (key.equals("create"))
-			{
-				table.setCreate(boolValue);
-			}
-			else if (key.equals("truncate"))
-			{
-				table.setTruncate(boolValue);
-			}
-			else if (key.equals("drop"))
-			{
-				table.setDrop(boolValue);
-			}
-			else if (key.equals("copyviatemptable"))
-			{
-				table.setCopyViaTempTable(boolValue);
-			}
-			else if (key.equals("temptableprefix"))
-			{
-				table.setTempTablePrefix(propValue);
-			}
-
-			tablesToCopy.put(id, table);
-		}
-
-		// verify each specified has a from and to name and add temp tables
-		// and add temptable configuration if copyViaTempTable
-		Iterator<Entry<String, CopyTable>> iter = tablesToCopy.entrySet().iterator();
-		while (iter.hasNext())
-		{
-			Entry<String, CopyTable> entry = iter.next();
-			String id = entry.getKey();
-			CopyTable table = entry.getValue();
-			if (table.getResultTable() == null)
-			{
-				LOG.error("Configuration for '" + id + "' is missing a result table");
-				iter.remove();
-				continue;
-			}
-
-			if (StringUtils.isEmpty(table.getResultTable().getFromName()))
-			{
-				LOG.error("Configuration for '" + id + "' is missing name of from table");
-				iter.remove();
-				continue;
-			}
-
-			if (StringUtils.isEmpty(table.getResultTable().getToName()))
-			{
-				LOG.warn("Configuration for '" + id
-					+ "' is missing name of to table. Using name of from table ("
-					+ table.getResultTable().getFromName() + ")");
-				table.getResultTable().setToName(table.getResultTable().getFromName());
-			}
-
-			if (table.isCopyViaTempTable() && table.getTempTable() == null)
-			{
-				MonetDBTable tempTable = new MonetDBTable(table);
-				tempTable.setTempTable(true);
-				tempTable.setFromName(table.getResultTable().getFromName());
-				// toName = tempTablePrefix + toName
-				tempTable
-					.setToName(table.getTempTablePrefix() + table.getResultTable().getToName());
-				table.getMonetDBTables().add(tempTable);
-			}
-		}
-
-		if (tablesToCopy.size() == 0)
-		{
-			LOG.error("Configuration has specified NO tables to copy!");
-		}
-		else
-		{
-			LOG.info("The following tables will be copied: ");
-			for (CopyTable table : tablesToCopy.values())
-			{
-				LOG.info("* " + table.getResultTable().getFromName() + " -> "
-					+ table.getResultTable().getToName());
-			}
-		}
-
-		return tablesToCopy;
-	}
-
-	protected void openConnections()
-	{
-		// make sure JDBC drivers are loaded
+		boolean tableExists = true;
 		try
 		{
-			Class.forName("nl.cwi.monetdb.jdbc.MonetDriver");
-		}
-		catch (ClassNotFoundException e)
-		{
-			LOG.fatal("Unable to load MonetDB JDBC driver");
-			System.exit(1);
-		}
-
-		try
-		{
-			Class.forName("net.sourceforge.jtds.jdbc.Driver");
-		}
-		catch (ClassNotFoundException e)
-		{
-			LOG.fatal("Unable to load MS SQL jTDS JDBC driver");
-			System.exit(1);
-		}
-
-		try
-		{
-			if (mssqlConn == null || mssqlConn.isClosed())
-			{
-				Properties connProps = new Properties();
-				String user = config.getProperty(CONFIG_KEYS.MSSQL_USER.toString());
-				String password = config.getProperty(CONFIG_KEYS.MSSQL_PASSWORD.toString());
-				String instance = config.getProperty(CONFIG_KEYS.MSSQL_INSTANCE.toString());
-
-				if (StringUtils.isEmpty(user) == false && StringUtils.isEmpty(password) == false)
-				{
-					connProps.setProperty("user", user);
-					connProps.setProperty("password", password);
-				}
-
-				if (StringUtils.isEmpty(instance) == false)
-				{
-					connProps.setProperty("instance", instance);
-				}
-
-				String url =
-					"jdbc:jtds:sqlserver://"
-						+ config.getProperty(CONFIG_KEYS.MSSQL_SERVER.toString()) + "/"
-						+ config.getProperty(CONFIG_KEYS.MSSQL_DATABASE.toString());
-				LOG.info("Using connection URL for MS SQL Server: " + url);
-
-				mssqlConn = DriverManager.getConnection(url, connProps);
-				LOG.info("Opened connection to MS SQL Server");
-			}
+			Statement q = monetDbConn.createStatement();
+			q.executeQuery("SELECT * FROM " + monetDBTable.getToTableSql() + " LIMIT 1");
 		}
 		catch (SQLException e)
 		{
-			LOG.fatal("Unable to open connection to MS SQL server", e);
-			System.exit(1);
-		}
-
-		try
-		{
-			if (monetDbConn == null || monetDbConn.isClosed())
+			if (e.getMessage().indexOf("no such table") > -1)
 			{
-				Properties connProps = new Properties();
-				String user = config.getProperty(CONFIG_KEYS.MONETDB_USER.toString());
-				String password = config.getProperty(CONFIG_KEYS.MONETDB_PASSWORD.toString());
-
-				if (StringUtils.isEmpty(user) == false && StringUtils.isEmpty(password) == false)
-				{
-					connProps.setProperty("user", user);
-					connProps.setProperty("password", password);
-				}
-
-				String url =
-					"jdbc:monetdb://" + config.getProperty(CONFIG_KEYS.MONETDB_SERVER.toString())
-						+ "/" + config.getProperty(CONFIG_KEYS.MONETDB_DATABASE.toString());
-				LOG.info("Using connection URL for MonetDB Server: " + url);
-
-				monetDbConn = DriverManager.getConnection(url, connProps);
-				LOG.info("Opened connection to MonetDB Server");
-			}
-		}
-		catch (SQLException e)
-		{
-			LOG.fatal("Unable to open connection to MonetDB server", e);
-			closeConnections();
-			System.exit(1);
-		}
-
-		monetDbServer = new MapiSocket();
-
-		monetDbServer.setDatabase(config.getProperty(CONFIG_KEYS.MONETDB_DATABASE.toString()));
-		monetDbServer.setLanguage("sql");
-
-		try
-		{
-			LOG.info("Opening direct connection to MonetDB server...");
-			List<String> warnList =
-				monetDbServer.connect(config.getProperty(CONFIG_KEYS.MONETDB_SERVER.toString()),
-					50000, config.getProperty(CONFIG_KEYS.MONETDB_USER.toString()),
-					config.getProperty(CONFIG_KEYS.MONETDB_PASSWORD.toString()));
-
-			if (warnList != null && warnList.size() > 0)
-			{
-				for (String warning : warnList)
-				{
-					LOG.error(warning);
-				}
-
-				LOG.error("Unable to setup direct connection with MonetDB server");
-				monetDbServer.close();
-				monetDbServer = null;
-
+				// ok, so does not exist
+				tableExists = false;
 			}
 			else
 			{
-				LOG.info("Direct connection opened");
+				throw e;
 			}
 		}
-		catch (Exception e)
+
+		return tableExists;
+	}
+
+	private void truncateMonetDBTable(MonetDBTable monetDBTable) throws SQLException
+	{
+		if (monetDBTableExists(monetDBTable))
 		{
-			LOG.error("Unable to setup direct connection with MonetDB server");
-
-			monetDbServer.close();
-			monetDbServer = null;
+			LOG.info("Truncating table " + monetDBTable.getToTableSql() + " on MonetDB server...");
+			monetDbConn.createStatement().execute("DELETE FROM " + monetDBTable.getToTableSql());
+			LOG.info("Table truncated");
 		}
+		else
+		{
+			LOG.warn("Did not truncate " + monetDBTable.getToTableSql()
+				+ " because it did not exist.");
+		}
+	}
 
+	private void dropMonetDBTable(MonetDBTable monetDBTable) throws SQLException
+	{
+		if (monetDBTableExists(monetDBTable))
+		{
+			LOG.info("Dropping table " + monetDBTable.getToTableSql() + " in MonetDB database...");
+			monetDbConn.createStatement().executeUpdate(
+				"DROP TABLE " + monetDBTable.getToTableSql());
+			LOG.info("Table " + monetDBTable.getToTableSql() + " dropped");
+		}
+		else
+		{
+			LOG.warn("Did not drop " + monetDBTable.getToTableSql() + " because it did not exist.");
+		}
+	}
+
+	/**
+	 * Copy (create and insert data) a {@link MonetDBTable} to another
+	 * {@link MonetDBTable} with the following statement: CREATE TABLE newTable AS SELECT
+	 * * FROM existingTable WITH DATA;
+	 * 
+	 * @throws SQLException
+	 */
+	private void copyMonetDBTableToNewMonetDBTable(MonetDBTable existingTable, MonetDBTable newTable)
+			throws SQLException
+	{
+		if (monetDBTableExists(existingTable))
+		{
+			LOG.info("Copying table " + existingTable.getToTableSql() + " to "
+				+ newTable.getToTableSql() + " with data");
+			monetDbConn.createStatement().execute(
+				"CREATE TABLE " + newTable.getToTableSql() + " AS SELECT * FROM "
+					+ existingTable.getToTableSql() + " WITH DATA");
+		}
+		else
+		{
+			LOG.warn("Did not copy " + existingTable.getToTableSql() + " to "
+				+ newTable.getToTableSql() + ", because" + existingTable.getToTableSql()
+				+ " did not exist.");
+		}
 	}
 
 	protected void closeConnections()
