@@ -26,6 +26,8 @@ public class CopyTable
 
 	private boolean drop = false;
 
+	private String fromName;
+
 	private int copyMethod = COPY_METHOD_INSERT;
 
 	// copies the table to a temp table and then replaces the 'to' table with the temp
@@ -33,7 +35,12 @@ public class CopyTable
 	private boolean copyViaTempTable = false;
 
 	// prefix of the temp table that is created
-	private String tempTablePrefix = "";
+	private String tempTablePrefix = "tmp_";
+
+	// backup all tables, default is false
+	private boolean backup = false;
+
+	private String backupTablePrefix = "backup_";
 
 	public void setCopyMethod(int copyMethod)
 	{
@@ -75,6 +82,16 @@ public class CopyTable
 		return this.create;
 	}
 
+	public String getFromName()
+	{
+		return fromName;
+	}
+
+	public void setFromName(String fromName)
+	{
+		this.fromName = fromName;
+	}
+
 	public List<MonetDBTable> getMonetDBTables()
 	{
 		return monetDBTables;
@@ -103,6 +120,26 @@ public class CopyTable
 	public void setTempTablePrefix(String tempTablePrefix)
 	{
 		this.tempTablePrefix = tempTablePrefix;
+	}
+
+	public boolean isBackup()
+	{
+		return backup;
+	}
+
+	public void setBackup(boolean backup)
+	{
+		this.backup = backup;
+	}
+
+	public String getBackupTablePrefix()
+	{
+		return backupTablePrefix;
+	}
+
+	public void setBackupTablePrefix(String backupTablePrefix)
+	{
+		this.backupTablePrefix = backupTablePrefix;
 	}
 
 	public MonetDBTable getResultTable()

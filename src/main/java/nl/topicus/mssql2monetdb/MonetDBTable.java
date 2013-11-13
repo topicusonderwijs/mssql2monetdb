@@ -1,12 +1,17 @@
 package nl.topicus.mssql2monetdb;
 
+import nl.topicus.mssql2monetdb.util.MonetDBUtil;
+
 import org.apache.commons.lang.StringUtils;
 
+/**
+ * Representation of a MonetDB table.
+ * 
+ * @author bloemendal
+ */
 public class MonetDBTable
 {
-	private String fromName;
-
-	private String toName;
+	private String name;
 
 	private String schema;
 
@@ -19,24 +24,14 @@ public class MonetDBTable
 		this.copyTable = copyTable;
 	}
 
-	public String getFromName()
+	public String getName()
 	{
-		return fromName;
+		return name;
 	}
 
-	public void setFromName(String fromName)
+	public void setName(String name)
 	{
-		this.fromName = fromName;
-	}
-
-	public String getToName()
-	{
-		return toName;
-	}
-
-	public void setToName(String toName)
-	{
-		this.toName = toName;
+		this.name = name;
 	}
 
 	public String getSchema()
@@ -75,11 +70,11 @@ public class MonetDBTable
 
 		if (StringUtils.isEmpty(schema) == false)
 		{
-			sql = CopyTool.quoteMonetDbIdentifier(schema);
+			sql = MonetDBUtil.quoteMonetDbIdentifier(schema);
 			sql = sql + ".";
 		}
 
-		sql = sql + CopyTool.quoteMonetDbIdentifier(toName);
+		sql = sql + MonetDBUtil.quoteMonetDbIdentifier(name);
 
 		return sql;
 	}
