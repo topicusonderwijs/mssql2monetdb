@@ -21,4 +21,5 @@ table.example.create = true
 table.example.truncate = true
 table.example.copyViaTempTable = true
 table.example.tempTablePrefix = tmp_
-table.exmaple.backup = true
+table.example.backup = true
+table.example.backupTablePrefix = backup_
