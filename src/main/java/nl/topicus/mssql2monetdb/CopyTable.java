@@ -3,6 +3,10 @@ package nl.topicus.mssql2monetdb;
 import java.util.ArrayList;
 import java.util.List;
 
+import nl.topicus.mssql2monetdb.util.MonetDBUtil;
+
+import org.apache.commons.lang.StringUtils;
+
 /**
  * The global CopyTables object which contains the configuration for a table that needs to
  * be copied like which copy method should be used, but also contains {@link MonetDBTable}
@@ -26,7 +30,12 @@ public class CopyTable
 
 	private boolean drop = false;
 
+	// secret view name
+	private String toName;
+
 	private String fromName;
+
+	private String schema;
 
 	private int copyMethod = COPY_METHOD_INSERT;
 
@@ -37,8 +46,9 @@ public class CopyTable
 	// prefix of the temp table that is created
 	private String tempTablePrefix = "tmp_";
 
-	// backup all tables, default is false
-	private boolean backup = false;
+	// backup table, which needs to be done to have a fallback table and to set the view
+	// during the copy action to reduce down-time, thus the default is true
+	private boolean backup = true;
 
 	private String backupTablePrefix = "backup_";
 
@@ -92,6 +102,26 @@ public class CopyTable
 		this.fromName = fromName;
 	}
 
+	public String getToName()
+	{
+		return toName;
+	}
+
+	public void setToName(String toName)
+	{
+		this.toName = toName;
+	}
+
+	public String getSchema()
+	{
+		return schema;
+	}
+
+	public void setSchema(String schema)
+	{
+		this.schema = schema;
+	}
+
 	public List<MonetDBTable> getMonetDBTables()
 	{
 		return monetDBTables;
@@ -142,7 +172,7 @@ public class CopyTable
 		this.backupTablePrefix = backupTablePrefix;
 	}
 
-	public MonetDBTable getResultTable()
+	public MonetDBTable getCurrentTable()
 	{
 		for (MonetDBTable table : monetDBTables)
 			if (!table.isTempTable())
@@ -160,5 +190,20 @@ public class CopyTable
 		}
 
 		return null;
+	}
+
+	public String getToViewSql()
+	{
+		String sql = "";
+
+		if (StringUtils.isNotEmpty(schema))
+		{
+			sql = MonetDBUtil.quoteMonetDbIdentifier(schema);
+			sql = sql + ".";
+		}
+
+		sql = sql + MonetDBUtil.quoteMonetDbIdentifier(toName);
+
+		return sql;
 	}
 }

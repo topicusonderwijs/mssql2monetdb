@@ -34,16 +34,6 @@ public class MonetDBTable
 		this.name = name;
 	}
 
-	public String getSchema()
-	{
-		return schema;
-	}
-
-	public void setSchema(String schema)
-	{
-		this.schema = schema;
-	}
-
 	public boolean isTempTable()
 	{
 		return tempTable;

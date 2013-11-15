@@ -23,12 +23,17 @@ public class MonetDBUtil
 	 */
 	public static boolean monetDBTableExists(MonetDBTable monetDBTable) throws SQLException
 	{
+		return tableOrViewExists(monetDBTable.getToTableSql());
+	}
+
+	public static boolean tableOrViewExists(String table) throws SQLException
+	{
 		boolean tableExists = true;
 		try
 		{
 			Statement q =
 				CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
-			q.executeQuery("SELECT * FROM " + monetDBTable.getToTableSql() + " LIMIT 1");
+			q.executeQuery("SELECT * FROM " + table + " LIMIT 1");
 		}
 		catch (SQLException e)
 		{
@@ -344,4 +349,49 @@ public class MonetDBUtil
 		LOG.info("Table verified");
 	}
 
+	/**
+	 * Drops a view, if it exists, and creates the view for which queries (select * from)
+	 * a {@link MonetDBTable}.
+	 */
+	public static void dropAndRecreateViewForTable(String view, MonetDBTable monetDBTable)
+			throws SQLException
+	{
+		if (monetDBTableExists(monetDBTable))
+		{
+			LOG.info("Creating view " + view + " on MonetDB server...");
+
+			// execute CREATE TABLE SQL query
+			try
+			{
+				Statement stmt =
+					CopyToolConnectionManager.getInstance().getMonetDbConnection()
+						.createStatement();
+				StringBuilder builder = new StringBuilder();
+				if (tableOrViewExists(view))
+				{
+					builder.append("DROP VIEW " + view + ";");
+				}
+
+				builder.append("CREATE VIEW " + view + " AS SELECT * FROM "
+					+ monetDBTable.getToTableSql());
+
+				stmt.execute(builder.toString());
+			}
+			catch (SQLException e)
+			{
+				LOG.error("Error dropping and recreating the view "
+					+ monetDBTable.getCopyTable().getToName(), e);
+				throw new RuntimeException(e);
+			}
+			LOG.info("View created");
+
+			// fresh table so we can use COPY INTO since we know its ok
+			monetDBTable.getCopyTable().setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
+		}
+		else
+		{
+			LOG.info("View not created because the monetDBTable " + monetDBTable.getToTableSql()
+				+ " does not exist");
+		}
+	}
 }
