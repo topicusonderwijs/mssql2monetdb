@@ -155,8 +155,7 @@ public class CopyToolConfig
 			else if (key.equals("to"))
 			{
 				table.setToName(propValue.toLowerCase());
-				// set current table because the toName will be used for the view
-				table.getCurrentTable().setName("current_" + propValue.toLowerCase());
+				table.getCurrentTable().setName(propValue.toLowerCase());
 			}
 			else if (key.equals("schema"))
 			{
@@ -182,13 +181,17 @@ public class CopyToolConfig
 			{
 				table.setTempTablePrefix(propValue);
 			}
-			else if (key.equals("backup"))
-			{
-				table.setBackup(boolValue);
-			}
 			else if (key.equals("backuptableprefix"))
 			{
 				table.setBackupTablePrefix(propValue);
+			}
+			else if (key.equals("currenttableprefix"))
+			{
+				table.setCurrentTablePrefix(propValue);
+			}
+			else if (key.equals("usefastviewswitching"))
+			{
+				table.setUseFastViewSwitching(boolValue);
 			}
 
 			tablesToCopy.put(id, table);
@@ -216,7 +219,7 @@ public class CopyToolConfig
 				continue;
 			}
 
-			if (StringUtils.isEmpty(table.getCurrentTable().getName()))
+			if (StringUtils.isEmpty(table.getCurrentTable().getNameWithPrefixes()))
 			{
 				LOG.warn("Configuration for '" + id
 					+ "' is missing name of to table. Using name of from table ("
@@ -228,8 +231,7 @@ public class CopyToolConfig
 			{
 				MonetDBTable tempTable = new MonetDBTable(table);
 				tempTable.setTempTable(true);
-				// toName = tempTablePrefix + toName
-				tempTable.setName(table.getTempTablePrefix() + table.getToName());
+				tempTable.setName(table.getToName());
 				table.getMonetDBTables().add(tempTable);
 			}
 		}
@@ -243,7 +245,8 @@ public class CopyToolConfig
 			LOG.info("The following tables will be copied: ");
 			for (CopyTable table : tablesToCopy.values())
 			{
-				LOG.info("* " + table.getFromName() + " -> " + table.getCurrentTable().getName());
+				LOG.info("* " + table.getFromName() + " -> "
+					+ table.getCurrentTable().getNameWithPrefixes());
 			}
 		}
 

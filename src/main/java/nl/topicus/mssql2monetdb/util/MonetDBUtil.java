@@ -23,32 +23,62 @@ public class MonetDBUtil
 	 */
 	public static boolean monetDBTableExists(MonetDBTable monetDBTable) throws SQLException
 	{
-		return tableOrViewExists(monetDBTable.getToTableSql());
+		return tableOrViewExists(monetDBTable.getCopyTable().getSchema(),
+			monetDBTable.getNameWithPrefixes());
 	}
 
-	public static boolean tableOrViewExists(String table) throws SQLException
+	/**
+	 * Checks if table (or view) exists by quering the sys.tables table. For that we need
+	 * the schema and the name.
+	 * 
+	 * @param schema
+	 *            the schema of the table
+	 * @param name
+	 *            the name of the table
+	 */
+	public static boolean tableOrViewExists(String schema, String name) throws SQLException
 	{
-		boolean tableExists = true;
 		try
 		{
 			Statement q =
 				CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
-			q.executeQuery("SELECT * FROM " + table + " LIMIT 1");
+			ResultSet result =
+				q.executeQuery("SELECT name FROM sys.tables WHERE name = '" + name
+					+ "' AND schema_id = (SELECT id FROM sys.schemas WHERE name = '" + schema
+					+ "')");
+			// is true if rows exists, otherwise it is false
+			return result.next();
 		}
 		catch (SQLException e)
 		{
-			if (e.getMessage().indexOf("no such table") > -1)
-			{
-				// ok, so does not exist
-				tableExists = false;
-			}
-			else
-			{
-				throw e;
-			}
+			LOG.error("Error while checking if table or view '" + schema + "." + name + "' exists",
+				e);
+			throw e;
 		}
+	}
 
-		return tableExists;
+	public static boolean isTable(String schema, String name) throws SQLException
+	{
+		try
+		{
+			Statement q =
+				CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
+			ResultSet result =
+				q.executeQuery("SELECT query FROM sys.tables WHERE name = '" + name
+					+ "' and schema_id = (SELECT id from sys.schemas WHERE name = '" + schema
+					+ "')");
+			// move resultset to the actual result
+			if (!result.next())
+				return false;
+			// the query column will be filled with a query when its a view, so if its
+			// null it will be a table
+			return result.getObject("query") == null;
+		}
+		catch (SQLException e)
+		{
+			LOG.error("Error while checking if '" + name + "' is a table", e);
+			throw e;
+		}
 	}
 
 	/**
@@ -352,13 +382,20 @@ public class MonetDBUtil
 	/**
 	 * Drops a view, if it exists, and creates the view for which queries (select * from)
 	 * a {@link MonetDBTable}.
+	 * 
+	 * @param name
+	 *            the name of the view we need to create
+	 * @param schema
+	 *            the schema of the view, we need this separately for the name to check if
+	 *            the table exists
 	 */
-	public static void dropAndRecreateViewForTable(String view, MonetDBTable monetDBTable)
-			throws SQLException
+	public static void dropAndRecreateViewForTable(String schema, String name,
+			MonetDBTable monetDBTable) throws SQLException
 	{
+		String fullName = schema + "." + name;
 		if (monetDBTableExists(monetDBTable))
 		{
-			LOG.info("Creating view " + view + " on MonetDB server...");
+			LOG.info("Creating view " + name + " on MonetDB server...");
 
 			// execute CREATE TABLE SQL query
 			try
@@ -367,12 +404,16 @@ public class MonetDBUtil
 					CopyToolConnectionManager.getInstance().getMonetDbConnection()
 						.createStatement();
 				StringBuilder builder = new StringBuilder();
-				if (tableOrViewExists(view))
+				if (tableOrViewExists(schema, name))
 				{
-					builder.append("DROP VIEW " + view + ";");
+					// if its a table, drop the table
+					if (isTable(schema, name))
+						builder.append("DROP TABLE " + fullName + ";");
+					else
+						builder.append("DROP VIEW " + fullName + ";");
 				}
 
-				builder.append("CREATE VIEW " + view + " AS SELECT * FROM "
+				builder.append("CREATE VIEW " + fullName + " AS SELECT * FROM "
 					+ monetDBTable.getToTableSql());
 
 				stmt.execute(builder.toString());

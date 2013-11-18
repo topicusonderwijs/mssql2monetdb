@@ -60,8 +60,8 @@ public class CopyTool
 					try
 					{
 						// backup table if configured and switch view to the backup table
-						if (table.isBackup())
-							backupTable(table.getCurrentTable());
+						if (table.isUseFastViewSwitching())
+							backupTableAndSwitchView(table.getCurrentTable());
 
 						// copy new data to monetdb
 						copyTable(table);
@@ -85,12 +85,10 @@ public class CopyTool
 					}
 					try
 					{
-						// current table because it contains the new data now
-						if (copyTable.isBackup())
-						{
-							MonetDBUtil.dropAndRecreateViewForTable(copyTable.getToViewSql(),
-								copyTable.getCurrentTable());
-						}
+						// set view to current table because it contains the new data now
+						if (copyTable.isUseFastViewSwitching())
+							MonetDBUtil.dropAndRecreateViewForTable(copyTable.getSchema(),
+								copyTable.getToName(), copyTable.getCurrentTable());
 					}
 					catch (SQLException e)
 					{
@@ -111,21 +109,24 @@ public class CopyTool
 	 * 
 	 * @throws SQLException
 	 */
-	private void backupTable(MonetDBTable currentTable) throws SQLException
+	private void backupTableAndSwitchView(MonetDBTable currentTable) throws SQLException
 	{
+		LOG.info("Backupping " + currentTable.getToTableSql());
 		// create a MonetDBTable object for the backup table
 		MonetDBTable backupTable = new MonetDBTable(currentTable.getCopyTable());
 		// use the copyTable.toName
-		backupTable.setName(backupTable.getCopyTable().getBackupTablePrefix()
-			+ currentTable.getCopyTable().getToName());
+		backupTable.setName(currentTable.getCopyTable().getToName());
+		backupTable.setBackupTable(true);
 		// drop and recreate backup table regardless if it exists
+		LOG.info("Drop backup table '" + backupTable.getToTableSql() + "' if exists");
 		MonetDBUtil.dropMonetDBTable(backupTable);
 		// copy from currentTable to backup table
 		MonetDBUtil.copyMonetDBTableToNewMonetDBTable(currentTable, backupTable);
+		LOG.info("Switch view to '" + backupTable.getToTableSql() + "'");
 		// drop and recreate the view for the table and point to the just created backup
 		// table so we can fill the current table with new data
-		MonetDBUtil.dropAndRecreateViewForTable(currentTable.getCopyTable().getToViewSql(),
-			backupTable);
+		MonetDBUtil.dropAndRecreateViewForTable(currentTable.getCopyTable().getSchema(),
+			currentTable.getCopyTable().getToName(), backupTable);
 	}
 
 	/**
@@ -204,6 +205,7 @@ public class CopyTool
 
 		// close everything again
 		resultSet.close();
+
 		selectStmt.close();
 
 		LOG.info("Finished copy of table " + table.getFromName());

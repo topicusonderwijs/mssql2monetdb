@@ -41,16 +41,20 @@ public class CopyTable
 
 	// copies the table to a temp table and then replaces the 'to' table with the temp
 	// table to reduce down-time
-	private boolean copyViaTempTable = false;
+	private boolean copyViaTempTable = true;
 
 	// prefix of the temp table that is created
 	private String tempTablePrefix = "tmp_";
 
-	// backup table, which needs to be done to have a fallback table and to set the view
-	// during the copy action to reduce down-time, thus the default is true
-	private boolean backup = true;
-
 	private String backupTablePrefix = "backup_";
+
+	private String currentTablePrefix = "current_";
+
+	// this will create views with the table.example.to name and will backup your table to
+	// a backup table this will make it possible to switch the underlying table of the
+	// view when data copying is complete resulting in almost no down-time of your
+	// database table
+	private boolean useFastViewSwitching = false;
 
 	public void setCopyMethod(int copyMethod)
 	{
@@ -152,14 +156,24 @@ public class CopyTable
 		this.tempTablePrefix = tempTablePrefix;
 	}
 
-	public boolean isBackup()
+	public String getCurrentTablePrefix()
 	{
-		return backup;
+		return currentTablePrefix;
 	}
 
-	public void setBackup(boolean backup)
+	public void setCurrentTablePrefix(String currentTablePrefix)
 	{
-		this.backup = backup;
+		this.currentTablePrefix = currentTablePrefix;
+	}
+
+	public boolean isUseFastViewSwitching()
+	{
+		return useFastViewSwitching;
+	}
+
+	public void setUseFastViewSwitching(boolean useViews)
+	{
+		this.useFastViewSwitching = useViews;
 	}
 
 	public String getBackupTablePrefix()
