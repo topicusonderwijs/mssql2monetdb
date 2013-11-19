@@ -397,8 +397,8 @@ public class MonetDBUtil
 		String fullName = schema + "." + name;
 		if (monetDBTableExists(monetDBTable))
 		{
-			LOG.info("Creating view '" + fullName + "' for table '" + monetDBTable.getToTableSql()
-				+ "' on MonetDB server...");
+			LOG.info("Drop and recreate or create the view '" + fullName + "' for table '"
+				+ monetDBTable.getToTableSql() + "' on MonetDB server...");
 
 			// execute CREATE TABLE SQL query
 			try
