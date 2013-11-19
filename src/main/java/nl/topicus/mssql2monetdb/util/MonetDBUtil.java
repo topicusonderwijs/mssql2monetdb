@@ -88,15 +88,15 @@ public class MonetDBUtil
 	{
 		if (monetDBTableExists(monetDBTable))
 		{
-			LOG.info("Truncating table " + monetDBTable.getToTableSql() + " on MonetDB server...");
+			LOG.info("Truncating table '" + monetDBTable.getToTableSql() + "' on MonetDB server...");
 			CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement()
 				.execute("DELETE FROM " + monetDBTable.getToTableSql());
 			LOG.info("Table truncated");
 		}
 		else
 		{
-			LOG.warn("Did not truncate " + monetDBTable.getToTableSql()
-				+ " because it did not exist.");
+			LOG.warn("Did not truncate '" + monetDBTable.getToTableSql()
+				+ "' because it did not exist.");
 		}
 	}
 
@@ -108,15 +108,15 @@ public class MonetDBUtil
 		if (monetDBTableExists(monetDBTable)
 			&& isTable(monetDBTable.getCopyTable().getSchema(), monetDBTable.getNameWithPrefixes()))
 		{
-			LOG.info("Dropping table " + monetDBTable.getToTableSql() + " in MonetDB database...");
+			LOG.info("Dropping table '" + monetDBTable.getToTableSql() + "' in MonetDB database...");
 			CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement()
 				.executeUpdate("DROP TABLE " + monetDBTable.getToTableSql());
 			LOG.info("Table " + monetDBTable.getToTableSql() + " dropped");
 		}
 		else
 		{
-			LOG.warn("Did not drop " + monetDBTable.getToTableSql()
-				+ " because it did not exist or it isn't a table but a view.");
+			LOG.warn("Did not drop '" + monetDBTable.getToTableSql()
+				+ "' because it did not exist or it isn't a table but a view.");
 		}
 	}
 
@@ -132,8 +132,8 @@ public class MonetDBUtil
 	{
 		if (monetDBTableExists(existingTable))
 		{
-			LOG.info("Copying table " + existingTable.getToTableSql() + " to "
-				+ newTable.getToTableSql() + " with data");
+			LOG.info("Copying table '" + existingTable.getToTableSql() + "' to '"
+				+ newTable.getToTableSql() + "' with data");
 			CopyToolConnectionManager
 				.getInstance()
 				.getMonetDbConnection()
@@ -144,8 +144,8 @@ public class MonetDBUtil
 		}
 		else
 		{
-			LOG.warn("Did not copy " + existingTable.getToTableSql() + " to "
-				+ newTable.getToTableSql() + ", because" + existingTable.getToTableSql()
+			LOG.warn("Did not copy '" + existingTable.getToTableSql() + "' to '"
+				+ newTable.getToTableSql() + "', because" + existingTable.getToTableSql()
 				+ " did not exist.");
 		}
 	}
@@ -157,7 +157,7 @@ public class MonetDBUtil
 			throws SQLException
 	{
 		// build SQL query to create table
-		LOG.info("Creating table " + monetDBTable.getToTableSql() + " on MonetDB server...");
+		LOG.info("Creating table '" + monetDBTable.getToTableSql() + "' on MonetDB server...");
 		StringBuilder createSql =
 			new StringBuilder("CREATE TABLE " + monetDBTable.getToTableSql() + " (");
 
@@ -172,7 +172,7 @@ public class MonetDBUtil
 		// execute CREATE TABLE SQL query
 		CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement()
 			.execute(createSql.toString());
-		LOG.info("Table created");
+		LOG.info("Table '" + monetDBTable.getToTableSql() + "' created");
 
 		// fresh table so we can use COPY INTO since we know its ok
 		monetDBTable.getCopyTable().setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
@@ -327,8 +327,8 @@ public class MonetDBUtil
 	public static void verifyColumnsOfExistingTable(MonetDBTable table, ResultSetMetaData metaData)
 			throws SQLException
 	{
-		LOG.info("Verifying existing table " + table.getToTableSql()
-			+ " in MonetDB matches table schema in MS SQL...");
+		LOG.info("Verifying existing table '" + table.getToTableSql()
+			+ "' in MonetDB matches table schema in MS SQL...");
 
 		// do a select on the table in MonetDB to get its metadata
 		Statement q =
@@ -358,8 +358,8 @@ public class MonetDBUtil
 			else
 			{
 				// create column in MonetDB
-				LOG.info("Column " + colName + " is missing in MonetDB table");
-				LOG.info("Adding column " + colName + " in table " + table.getToTableSql()
+				LOG.info("Column '" + colName + "' is missing in MonetDB table");
+				LOG.info("Adding column '" + colName + "' in table " + table.getToTableSql()
 					+ " in MonetDB...");
 
 				String sql =
@@ -370,7 +370,7 @@ public class MonetDBUtil
 						.createStatement();
 				createColumn.execute(sql);
 
-				LOG.info("Column added");
+				LOG.info("Column '" + colName + "'added");
 			}
 		}
 
@@ -397,7 +397,8 @@ public class MonetDBUtil
 		String fullName = schema + "." + name;
 		if (monetDBTableExists(monetDBTable))
 		{
-			LOG.info("Creating view " + name + " on MonetDB server...");
+			LOG.info("Creating view '" + fullName + "' for table '" + monetDBTable.getToTableSql()
+				+ "' on MonetDB server...");
 
 			// execute CREATE TABLE SQL query
 			try
@@ -426,15 +427,15 @@ public class MonetDBUtil
 					+ monetDBTable.getCopyTable().getToName(), e);
 				throw new RuntimeException(e);
 			}
-			LOG.info("View created");
+			LOG.info("View '" + fullName + "' created");
 
 			// fresh table so we can use COPY INTO since we know its ok
 			monetDBTable.getCopyTable().setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
 		}
 		else
 		{
-			LOG.info("View not created because the monetDBTable " + monetDBTable.getToTableSql()
-				+ " does not exist");
+			LOG.info("View not created because the monetDBTable '" + monetDBTable.getToTableSql()
+				+ "' does not exist");
 		}
 	}
 }
