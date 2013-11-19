@@ -23,27 +23,62 @@ public class MonetDBUtil
 	 */
 	public static boolean monetDBTableExists(MonetDBTable monetDBTable) throws SQLException
 	{
-		boolean tableExists = true;
+		return tableOrViewExists(monetDBTable.getCopyTable().getSchema(),
+			monetDBTable.getNameWithPrefixes());
+	}
+
+	/**
+	 * Checks if table (or view) exists by quering the sys.tables table. For that we need
+	 * the schema and the name.
+	 * 
+	 * @param schema
+	 *            the schema of the table
+	 * @param name
+	 *            the name of the table
+	 */
+	public static boolean tableOrViewExists(String schema, String name) throws SQLException
+	{
 		try
 		{
 			Statement q =
 				CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
-			q.executeQuery("SELECT * FROM " + monetDBTable.getToTableSql() + " LIMIT 1");
+			ResultSet result =
+				q.executeQuery("SELECT name FROM sys.tables WHERE name = '" + name
+					+ "' AND schema_id = (SELECT id FROM sys.schemas WHERE name = '" + schema
+					+ "')");
+			// is true if rows exists, otherwise it is false
+			return result.next();
 		}
 		catch (SQLException e)
 		{
-			if (e.getMessage().indexOf("no such table") > -1)
-			{
-				// ok, so does not exist
-				tableExists = false;
-			}
-			else
-			{
-				throw e;
-			}
+			LOG.error("Error while checking if table or view '" + schema + "." + name + "' exists",
+				e);
+			throw e;
 		}
+	}
 
-		return tableExists;
+	public static boolean isTable(String schema, String name) throws SQLException
+	{
+		try
+		{
+			Statement q =
+				CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
+			ResultSet result =
+				q.executeQuery("SELECT query FROM sys.tables WHERE name = '" + name
+					+ "' and schema_id = (SELECT id from sys.schemas WHERE name = '" + schema
+					+ "')");
+			// move resultset to the actual result
+			if (!result.next())
+				return false;
+			// the query column will be filled with a query when its a view, so if its
+			// null it will be a table
+			return result.getObject("query") == null;
+		}
+		catch (SQLException e)
+		{
+			LOG.error("Error while checking if '" + name + "' is a table", e);
+			throw e;
+		}
 	}
 
 	/**
@@ -53,15 +88,15 @@ public class MonetDBUtil
 	{
 		if (monetDBTableExists(monetDBTable))
 		{
-			LOG.info("Truncating table " + monetDBTable.getToTableSql() + " on MonetDB server...");
+			LOG.info("Truncating table '" + monetDBTable.getToTableSql() + "' on MonetDB server...");
 			CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement()
 				.execute("DELETE FROM " + monetDBTable.getToTableSql());
 			LOG.info("Table truncated");
 		}
 		else
 		{
-			LOG.warn("Did not truncate " + monetDBTable.getToTableSql()
-				+ " because it did not exist.");
+			LOG.warn("Did not truncate '" + monetDBTable.getToTableSql()
+				+ "' because it did not exist.");
 		}
 	}
 
@@ -70,16 +105,18 @@ public class MonetDBUtil
 	 */
 	public static void dropMonetDBTable(MonetDBTable monetDBTable) throws SQLException
 	{
-		if (monetDBTableExists(monetDBTable))
+		if (monetDBTableExists(monetDBTable)
+			&& isTable(monetDBTable.getCopyTable().getSchema(), monetDBTable.getNameWithPrefixes()))
 		{
-			LOG.info("Dropping table " + monetDBTable.getToTableSql() + " in MonetDB database...");
+			LOG.info("Dropping table '" + monetDBTable.getToTableSql() + "' in MonetDB database...");
 			CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement()
 				.executeUpdate("DROP TABLE " + monetDBTable.getToTableSql());
 			LOG.info("Table " + monetDBTable.getToTableSql() + " dropped");
 		}
 		else
 		{
-			LOG.warn("Did not drop " + monetDBTable.getToTableSql() + " because it did not exist.");
+			LOG.warn("Did not drop '" + monetDBTable.getToTableSql()
+				+ "' because it did not exist or it isn't a table but a view.");
 		}
 	}
 
@@ -95,8 +132,8 @@ public class MonetDBUtil
 	{
 		if (monetDBTableExists(existingTable))
 		{
-			LOG.info("Copying table " + existingTable.getToTableSql() + " to "
-				+ newTable.getToTableSql() + " with data");
+			LOG.info("Copying table '" + existingTable.getToTableSql() + "' to '"
+				+ newTable.getToTableSql() + "' with data");
 			CopyToolConnectionManager
 				.getInstance()
 				.getMonetDbConnection()
@@ -107,8 +144,8 @@ public class MonetDBUtil
 		}
 		else
 		{
-			LOG.warn("Did not copy " + existingTable.getToTableSql() + " to "
-				+ newTable.getToTableSql() + ", because" + existingTable.getToTableSql()
+			LOG.warn("Did not copy '" + existingTable.getToTableSql() + "' to '"
+				+ newTable.getToTableSql() + "', because" + existingTable.getToTableSql()
 				+ " did not exist.");
 		}
 	}
@@ -120,7 +157,7 @@ public class MonetDBUtil
 			throws SQLException
 	{
 		// build SQL query to create table
-		LOG.info("Creating table " + monetDBTable.getToTableSql() + " on MonetDB server...");
+		LOG.info("Creating table '" + monetDBTable.getToTableSql() + "' on MonetDB server...");
 		StringBuilder createSql =
 			new StringBuilder("CREATE TABLE " + monetDBTable.getToTableSql() + " (");
 
@@ -135,7 +172,7 @@ public class MonetDBUtil
 		// execute CREATE TABLE SQL query
 		CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement()
 			.execute(createSql.toString());
-		LOG.info("Table created");
+		LOG.info("Table '" + monetDBTable.getToTableSql() + "' created");
 
 		// fresh table so we can use COPY INTO since we know its ok
 		monetDBTable.getCopyTable().setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
@@ -290,8 +327,8 @@ public class MonetDBUtil
 	public static void verifyColumnsOfExistingTable(MonetDBTable table, ResultSetMetaData metaData)
 			throws SQLException
 	{
-		LOG.info("Verifying existing table " + table.getToTableSql()
-			+ " in MonetDB matches table schema in MS SQL...");
+		LOG.info("Verifying existing table '" + table.getToTableSql()
+			+ "' in MonetDB matches table schema in MS SQL...");
 
 		// do a select on the table in MonetDB to get its metadata
 		Statement q =
@@ -321,8 +358,8 @@ public class MonetDBUtil
 			else
 			{
 				// create column in MonetDB
-				LOG.info("Column " + colName + " is missing in MonetDB table");
-				LOG.info("Adding column " + colName + " in table " + table.getToTableSql()
+				LOG.info("Column '" + colName + "' is missing in MonetDB table");
+				LOG.info("Adding column '" + colName + "' in table " + table.getToTableSql()
 					+ " in MonetDB...");
 
 				String sql =
@@ -333,7 +370,7 @@ public class MonetDBUtil
 						.createStatement();
 				createColumn.execute(sql);
 
-				LOG.info("Column added");
+				LOG.info("Column '" + colName + "'added");
 			}
 		}
 
@@ -344,4 +381,57 @@ public class MonetDBUtil
 		LOG.info("Table verified");
 	}
 
+	/**
+	 * Drops a view, if it exists, and creates the view for which queries (select * from)
+	 * a {@link MonetDBTable}.
+	 * 
+	 * @param name
+	 *            the name of the view we need to create
+	 * @param schema
+	 *            the schema of the view, we need this separately for the name to check if
+	 *            the table exists
+	 */
+	public static void dropAndRecreateViewForTable(String schema, String name,
+			MonetDBTable monetDBTable) throws SQLException
+	{
+		String fullName = schema + "." + name;
+		if (monetDBTableExists(monetDBTable))
+		{
+			LOG.info("Drop and recreate or create the view '" + fullName + "' for table '"
+				+ monetDBTable.getToTableSql() + "' on MonetDB server...");
+
+			try
+			{
+				Statement stmt =
+					CopyToolConnectionManager.getInstance().getMonetDbConnection()
+						.createStatement();
+				StringBuilder builder = new StringBuilder();
+				if (tableOrViewExists(schema, name))
+				{
+					// if its a table, drop the table
+					if (isTable(schema, name))
+						builder.append("DROP TABLE " + fullName + ";");
+					else
+						builder.append("DROP VIEW " + fullName + ";");
+				}
+
+				builder.append("CREATE VIEW " + fullName + " AS SELECT * FROM "
+					+ monetDBTable.getToTableSql());
+
+				stmt.execute(builder.toString());
+			}
+			catch (SQLException e)
+			{
+				LOG.error("Error dropping and recreating the view "
+					+ monetDBTable.getCopyTable().getToName(), e);
+				throw new RuntimeException(e);
+			}
+			LOG.info("View '" + fullName + "' created");
+		}
+		else
+		{
+			LOG.info("View not created because the monetDBTable '" + monetDBTable.getToTableSql()
+				+ "' does not exist");
+		}
+	}
 }

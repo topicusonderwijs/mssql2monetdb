@@ -59,9 +59,9 @@ public class CopyTool
 				{
 					try
 					{
-						// backup table if configured
-						if (table.isBackup())
-							backupTable(table.getResultTable());
+						// backup table if configured and switch view to the backup table
+						if (table.isUseFastViewSwitching())
+							backupTableAndSwitchView(table.getCurrentTable());
 
 						// copy new data to monetdb
 						copyTable(table);
@@ -72,35 +72,61 @@ public class CopyTool
 					}
 				}
 
-				// if there are any temp table copies configured, then copy the temp
-				// tables to
-				// result tables. We do this after the rest is done to reduce down-time
-				this.copyTempTableToResultTable(tablesToCopy);
+				// we need another loop through the tables for temp table copying and view
+				// switching. We do this after the copy actions to reduce down-time
+				for (CopyTable copyTable : tablesToCopy.values())
+				{
+					// if there are any temp table copies configured, then copy the
+					// temp tables to result tables. We do this after the rest is done to
+					// reduce down-time
+					if (copyTable.isCopyViaTempTable())
+					{
+						copyTempTableToCurrentTable(copyTable);
+					}
+					try
+					{
+						// set view to current table because it contains the new data now
+						if (copyTable.isUseFastViewSwitching())
+							MonetDBUtil.dropAndRecreateViewForTable(copyTable.getSchema(),
+								copyTable.getToName(), copyTable.getCurrentTable());
+					}
+					catch (SQLException e)
+					{
+						LOG.error("Unable to create view '" + copyTable.getToViewSql() + "'", e);
+					}
+				}
 			}
-
-			CopyToolConnectionManager.getInstance().closeConnections();
 		}
+
+		CopyToolConnectionManager.getInstance().closeConnections();
 
 		LOG.info("Finished!");
 	}
 
 	/**
-	 * Backup a table by copying the data into a backup table named backup_resultTable by
-	 * resultTable and metaData of the MSSQL table that is copied.
+	 * Backup a table by copying the data into a backup table named backup_currentTable by
+	 * currentTable and metaData of the MSSQL table that is copied.
 	 * 
 	 * @throws SQLException
 	 */
-	private void backupTable(MonetDBTable resultTable) throws SQLException
+	private void backupTableAndSwitchView(MonetDBTable currentTable) throws SQLException
 	{
+		LOG.info("Backupping " + currentTable.getToTableSql());
 		// create a MonetDBTable object for the backup table
-		MonetDBTable backupTable = new MonetDBTable(resultTable.getCopyTable());
-		backupTable.setSchema(resultTable.getSchema());
-		backupTable.setName(backupTable.getCopyTable().getBackupTablePrefix()
-			+ resultTable.getName());
+		MonetDBTable backupTable = new MonetDBTable(currentTable.getCopyTable());
+		// use the copyTable.toName
+		backupTable.setName(currentTable.getCopyTable().getToName());
+		backupTable.setBackupTable(true);
 		// drop and recreate backup table regardless if it exists
+		LOG.info("Drop backup table '" + backupTable.getToTableSql() + "' if exists");
 		MonetDBUtil.dropMonetDBTable(backupTable);
-		// copy from resulttable to backup table
-		MonetDBUtil.copyMonetDBTableToNewMonetDBTable(resultTable, backupTable);
+		// copy from currentTable to backup table
+		MonetDBUtil.copyMonetDBTableToNewMonetDBTable(currentTable, backupTable);
+		LOG.info("Switch view to '" + backupTable.getToTableSql() + "'");
+		// drop and recreate the view for the table and point to the just created backup
+		// table so we can fill the current table with new data
+		MonetDBUtil.dropAndRecreateViewForTable(currentTable.getCopyTable().getSchema(),
+			currentTable.getCopyTable().getToName(), backupTable);
 	}
 
 	/**
@@ -133,7 +159,7 @@ public class CopyTool
 		ResultSetMetaData metaData = resultSet.getMetaData();
 
 		MonetDBTable copyToTable =
-			table.isCopyViaTempTable() ? table.getTempTable() : table.getResultTable();
+			table.isCopyViaTempTable() ? table.getTempTable() : table.getCurrentTable();
 
 		// check tables in monetdb
 		checkTableInMonetDb(copyToTable, metaData);
@@ -179,6 +205,7 @@ public class CopyTool
 
 		// close everything again
 		resultSet.close();
+
 		selectStmt.close();
 
 		LOG.info("Finished copy of table " + table.getFromName());
@@ -195,7 +222,8 @@ public class CopyTool
 				+ " does not exist in MonetDB database and auto-create is set to false");
 		}
 
-		// need to drop?
+		// need to drop? don't drop when useFastViewSwitching is enabled because then we
+		// have a view
 		if (tableExists && monetDBTable.getCopyTable().drop())
 		{
 			MonetDBUtil.dropMonetDBTable(monetDBTable);
@@ -213,32 +241,27 @@ public class CopyTool
 		}
 	}
 
-	private void copyTempTableToResultTable(HashMap<String, CopyTable> tablesToCopy)
+	private void copyTempTableToCurrentTable(CopyTable copyTable)
 	{
-		// create table schema.temptable as select * from schema.resulttable with data;
+		// create table schema.temptable as select * from schema.currentTable with data;
 		LOG.info("Copying the temp table to the result table");
 		try
 		{
-			for (CopyTable copyTable : tablesToCopy.values())
+			// drop result table before replacing with temp table
+			if (MonetDBUtil.monetDBTableExists(copyTable.getCurrentTable()))
 			{
-				if (copyTable.isCopyViaTempTable())
-				{
-					// drop result table before replacing with temp table
-					if (MonetDBUtil.monetDBTableExists(copyTable.getResultTable()))
-					{
-						MonetDBUtil.dropMonetDBTable(copyTable.getResultTable());
-					}
-					MonetDBUtil.copyMonetDBTableToNewMonetDBTable(copyTable.getTempTable(),
-						copyTable.getResultTable());
-					// drop temp table, we wont need it anymore
-					MonetDBUtil.dropMonetDBTable(copyTable.getTempTable());
-				}
+				MonetDBUtil.dropMonetDBTable(copyTable.getCurrentTable());
 			}
+			MonetDBUtil.copyMonetDBTableToNewMonetDBTable(copyTable.getTempTable(),
+				copyTable.getCurrentTable());
+			// drop temp table, we wont need it anymore
+			MonetDBUtil.dropMonetDBTable(copyTable.getTempTable());
 		}
 		catch (SQLException e)
 		{
-			LOG.error("Error copying temp table to result tabel", e);
+			LOG.error("Error copying temp table to current table", e);
 		}
+
 		LOG.info("Finished copying the temp table to the result table");
 	}
 

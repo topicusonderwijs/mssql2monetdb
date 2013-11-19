@@ -13,15 +13,30 @@ public class MonetDBTable
 {
 	private String name;
 
-	private String schema;
-
 	private boolean tempTable = false;
+
+	private boolean backupTable = false;
 
 	private CopyTable copyTable;
 
 	public MonetDBTable(CopyTable copyTable)
 	{
 		this.copyTable = copyTable;
+	}
+
+	/**
+	 * Returns the name of the table with added prefixes if it's a temp or current table
+	 * (for fast view switching).
+	 */
+	public String getNameWithPrefixes()
+	{
+		if (tempTable)
+			return copyTable.getTempTablePrefix() + name;
+		else if (backupTable)
+			return copyTable.getBackupTablePrefix() + name;
+		else if (copyTable.isUseFastViewSwitching())
+			return copyTable.getCurrentTablePrefix() + name;
+		return name;
 	}
 
 	public String getName()
@@ -32,16 +47,6 @@ public class MonetDBTable
 	public void setName(String name)
 	{
 		this.name = name;
-	}
-
-	public String getSchema()
-	{
-		return schema;
-	}
-
-	public void setSchema(String schema)
-	{
-		this.schema = schema;
 	}
 
 	public boolean isTempTable()
@@ -64,17 +69,27 @@ public class MonetDBTable
 		this.copyTable = copyTable;
 	}
 
+	public boolean isBackupTable()
+	{
+		return backupTable;
+	}
+
+	public void setBackupTable(boolean backupTable)
+	{
+		this.backupTable = backupTable;
+	}
+
 	public String getToTableSql()
 	{
 		String sql = "";
 
-		if (StringUtils.isEmpty(schema) == false)
+		if (StringUtils.isEmpty(copyTable.getSchema()) == false)
 		{
-			sql = MonetDBUtil.quoteMonetDbIdentifier(schema);
+			sql = MonetDBUtil.quoteMonetDbIdentifier(copyTable.getSchema());
 			sql = sql + ".";
 		}
 
-		sql = sql + MonetDBUtil.quoteMonetDbIdentifier(name);
+		sql = sql + MonetDBUtil.quoteMonetDbIdentifier(getNameWithPrefixes());
 
 		return sql;
 	}

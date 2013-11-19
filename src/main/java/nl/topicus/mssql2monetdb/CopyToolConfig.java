@@ -154,11 +154,12 @@ public class CopyToolConfig
 			}
 			else if (key.equals("to"))
 			{
-				table.getResultTable().setName(propValue.toLowerCase());
+				table.setToName(propValue.toLowerCase());
+				table.getCurrentTable().setName(propValue.toLowerCase());
 			}
 			else if (key.equals("schema"))
 			{
-				table.getResultTable().setSchema(propValue);
+				table.setSchema(propValue);
 			}
 			else if (key.equals("create"))
 			{
@@ -180,13 +181,17 @@ public class CopyToolConfig
 			{
 				table.setTempTablePrefix(propValue);
 			}
-			else if (key.equals("backup"))
-			{
-				table.setBackup(boolValue);
-			}
 			else if (key.equals("backuptableprefix"))
 			{
 				table.setBackupTablePrefix(propValue);
+			}
+			else if (key.equals("currenttableprefix"))
+			{
+				table.setCurrentTablePrefix(propValue);
+			}
+			else if (key.equals("usefastviewswitching"))
+			{
+				table.setUseFastViewSwitching(boolValue);
 			}
 
 			tablesToCopy.put(id, table);
@@ -200,7 +205,7 @@ public class CopyToolConfig
 			Entry<String, CopyTable> entry = iter.next();
 			String id = entry.getKey();
 			CopyTable table = entry.getValue();
-			if (table.getResultTable() == null)
+			if (table.getCurrentTable() == null)
 			{
 				LOG.error("Configuration for '" + id + "' is missing a result table");
 				iter.remove();
@@ -214,20 +219,19 @@ public class CopyToolConfig
 				continue;
 			}
 
-			if (StringUtils.isEmpty(table.getResultTable().getName()))
+			if (StringUtils.isEmpty(table.getCurrentTable().getNameWithPrefixes()))
 			{
 				LOG.warn("Configuration for '" + id
 					+ "' is missing name of to table. Using name of from table ("
 					+ table.getFromName() + ")");
-				table.getResultTable().setName(table.getFromName());
+				table.getCurrentTable().setName(table.getFromName());
 			}
 
 			if (table.isCopyViaTempTable() && table.getTempTable() == null)
 			{
 				MonetDBTable tempTable = new MonetDBTable(table);
 				tempTable.setTempTable(true);
-				// toName = tempTablePrefix + toName
-				tempTable.setName(table.getTempTablePrefix() + table.getResultTable().getName());
+				tempTable.setName(table.getToName());
 				table.getMonetDBTables().add(tempTable);
 			}
 		}
@@ -241,7 +245,8 @@ public class CopyToolConfig
 			LOG.info("The following tables will be copied: ");
 			for (CopyTable table : tablesToCopy.values())
 			{
-				LOG.info("* " + table.getFromName() + " -> " + table.getResultTable().getName());
+				LOG.info("* " + table.getFromName() + " -> "
+					+ table.getCurrentTable().getNameWithPrefixes());
 			}
 		}
 
