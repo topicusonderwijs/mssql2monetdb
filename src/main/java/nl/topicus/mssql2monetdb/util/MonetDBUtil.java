@@ -105,7 +105,8 @@ public class MonetDBUtil
 	 */
 	public static void dropMonetDBTable(MonetDBTable monetDBTable) throws SQLException
 	{
-		if (monetDBTableExists(monetDBTable))
+		if (monetDBTableExists(monetDBTable)
+			&& isTable(monetDBTable.getCopyTable().getSchema(), monetDBTable.getNameWithPrefixes()))
 		{
 			LOG.info("Dropping table " + monetDBTable.getToTableSql() + " in MonetDB database...");
 			CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement()
@@ -114,7 +115,8 @@ public class MonetDBUtil
 		}
 		else
 		{
-			LOG.warn("Did not drop " + monetDBTable.getToTableSql() + " because it did not exist.");
+			LOG.warn("Did not drop " + monetDBTable.getToTableSql()
+				+ " because it did not exist or it isn't a table but a view.");
 		}
 	}
 

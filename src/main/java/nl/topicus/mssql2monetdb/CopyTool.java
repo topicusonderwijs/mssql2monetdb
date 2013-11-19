@@ -222,8 +222,10 @@ public class CopyTool
 				+ " does not exist in MonetDB database and auto-create is set to false");
 		}
 
-		// need to drop?
-		if (tableExists && monetDBTable.getCopyTable().drop())
+		// need to drop? don't drop when useFastViewSwitching is enabled because then we
+		// have a view
+		if (tableExists && monetDBTable.getCopyTable().drop()
+			&& !monetDBTable.getCopyTable().isUseFastViewSwitching())
 		{
 			MonetDBUtil.dropMonetDBTable(monetDBTable);
 			tableExists = false;
