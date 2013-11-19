@@ -28,7 +28,6 @@ public class CopyTable
 
 	private boolean create = true;
 
-	// will be ignored if useFastViewSwitching is true
 	private boolean drop = false;
 
 	// secret view name

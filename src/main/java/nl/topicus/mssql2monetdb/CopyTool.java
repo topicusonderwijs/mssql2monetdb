@@ -224,8 +224,7 @@ public class CopyTool
 
 		// need to drop? don't drop when useFastViewSwitching is enabled because then we
 		// have a view
-		if (tableExists && monetDBTable.getCopyTable().drop()
-			&& !monetDBTable.getCopyTable().isUseFastViewSwitching())
+		if (tableExists && monetDBTable.getCopyTable().drop())
 		{
 			MonetDBUtil.dropMonetDBTable(monetDBTable);
 			tableExists = false;
