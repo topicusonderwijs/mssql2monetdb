@@ -400,7 +400,6 @@ public class MonetDBUtil
 			LOG.info("Drop and recreate or create the view '" + fullName + "' for table '"
 				+ monetDBTable.getToTableSql() + "' on MonetDB server...");
 
-			// execute CREATE TABLE SQL query
 			try
 			{
 				Statement stmt =
@@ -428,9 +427,6 @@ public class MonetDBUtil
 				throw new RuntimeException(e);
 			}
 			LOG.info("View '" + fullName + "' created");
-
-			// fresh table so we can use COPY INTO since we know its ok
-			monetDBTable.getCopyTable().setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
 		}
 		else
 		{
