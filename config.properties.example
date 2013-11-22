@@ -19,5 +19,19 @@ table.example.to = example_table_new
 table.example.schema = sys
 table.example.create = true
 table.example.truncate = true
+
+# use tmp_tables to copy the data to so we can recreate the 
+# to-table for faster data transfer to the end table which 
+# reduces down-time
 table.example.copyViaTempTable = true
 table.example.tempTablePrefix = tmp_
+
+# this will create views with the table.example.to name 
+# and will backup your table to a backup table
+# this will make it possible to switch the underlying table 
+# of the view when data copying is complete
+# resulting in almost no down-time of your database table
+# prefixes can be defined if you want custom naming
+table.example.useFastViewSwitching = false
+table.example.currentTablePrefix = current_
+table.example.backupTablePrefix = backup_

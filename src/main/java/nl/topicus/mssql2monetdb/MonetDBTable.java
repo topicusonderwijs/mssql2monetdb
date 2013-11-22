@@ -1,16 +1,21 @@
 package nl.topicus.mssql2monetdb;
 
+import nl.topicus.mssql2monetdb.util.MonetDBUtil;
+
 import org.apache.commons.lang.StringUtils;
 
+/**
+ * Representation of a MonetDB table.
+ * 
+ * @author bloemendal
+ */
 public class MonetDBTable
 {
-	private String fromName;
-
-	private String toName;
-
-	private String schema;
+	private String name;
 
 	private boolean tempTable = false;
+
+	private boolean backupTable = false;
 
 	private CopyTable copyTable;
 
@@ -19,34 +24,29 @@ public class MonetDBTable
 		this.copyTable = copyTable;
 	}
 
-	public String getFromName()
+	/**
+	 * Returns the name of the table with added prefixes if it's a temp or current table
+	 * (for fast view switching).
+	 */
+	public String getNameWithPrefixes()
 	{
-		return fromName;
+		if (tempTable)
+			return copyTable.getTempTablePrefix() + name;
+		else if (backupTable)
+			return copyTable.getBackupTablePrefix() + name;
+		else if (copyTable.isUseFastViewSwitching())
+			return copyTable.getCurrentTablePrefix() + name;
+		return name;
 	}
 
-	public void setFromName(String fromName)
+	public String getName()
 	{
-		this.fromName = fromName;
+		return name;
 	}
 
-	public String getToName()
+	public void setName(String name)
 	{
-		return toName;
-	}
-
-	public void setToName(String toName)
-	{
-		this.toName = toName;
-	}
-
-	public String getSchema()
-	{
-		return schema;
-	}
-
-	public void setSchema(String schema)
-	{
-		this.schema = schema;
+		this.name = name;
 	}
 
 	public boolean isTempTable()
@@ -69,17 +69,27 @@ public class MonetDBTable
 		this.copyTable = copyTable;
 	}
 
+	public boolean isBackupTable()
+	{
+		return backupTable;
+	}
+
+	public void setBackupTable(boolean backupTable)
+	{
+		this.backupTable = backupTable;
+	}
+
 	public String getToTableSql()
 	{
 		String sql = "";
 
-		if (StringUtils.isEmpty(schema) == false)
+		if (StringUtils.isEmpty(copyTable.getSchema()) == false)
 		{
-			sql = CopyTool.quoteMonetDbIdentifier(schema);
+			sql = MonetDBUtil.quoteMonetDbIdentifier(copyTable.getSchema());
 			sql = sql + ".";
 		}
 
-		sql = sql + CopyTool.quoteMonetDbIdentifier(toName);
+		sql = sql + MonetDBUtil.quoteMonetDbIdentifier(getNameWithPrefixes());
 
 		return sql;
 	}

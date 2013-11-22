@@ -3,6 +3,10 @@ package nl.topicus.mssql2monetdb;
 import java.util.ArrayList;
 import java.util.List;
 
+import nl.topicus.mssql2monetdb.util.MonetDBUtil;
+
+import org.apache.commons.lang.StringUtils;
+
 /**
  * The global CopyTables object which contains the configuration for a table that needs to
  * be copied like which copy method should be used, but also contains {@link MonetDBTable}
@@ -26,14 +30,31 @@ public class CopyTable
 
 	private boolean drop = false;
 
+	// secret view name
+	private String toName;
+
+	private String fromName;
+
+	private String schema;
+
 	private int copyMethod = COPY_METHOD_INSERT;
 
 	// copies the table to a temp table and then replaces the 'to' table with the temp
 	// table to reduce down-time
-	private boolean copyViaTempTable = false;
+	private boolean copyViaTempTable = true;
 
 	// prefix of the temp table that is created
-	private String tempTablePrefix = "";
+	private String tempTablePrefix = "tmp_";
+
+	private String backupTablePrefix = "backup_";
+
+	private String currentTablePrefix = "current_";
+
+	// this will create views with the table.example.to name and will backup your table to
+	// a backup table this will make it possible to switch the underlying table of the
+	// view when data copying is complete resulting in almost no down-time of your
+	// database table
+	private boolean useFastViewSwitching = false;
 
 	public void setCopyMethod(int copyMethod)
 	{
@@ -75,6 +96,36 @@ public class CopyTable
 		return this.create;
 	}
 
+	public String getFromName()
+	{
+		return fromName;
+	}
+
+	public void setFromName(String fromName)
+	{
+		this.fromName = fromName;
+	}
+
+	public String getToName()
+	{
+		return toName;
+	}
+
+	public void setToName(String toName)
+	{
+		this.toName = toName;
+	}
+
+	public String getSchema()
+	{
+		return schema;
+	}
+
+	public void setSchema(String schema)
+	{
+		this.schema = schema;
+	}
+
 	public List<MonetDBTable> getMonetDBTables()
 	{
 		return monetDBTables;
@@ -105,7 +156,37 @@ public class CopyTable
 		this.tempTablePrefix = tempTablePrefix;
 	}
 
-	public MonetDBTable getResultTable()
+	public String getCurrentTablePrefix()
+	{
+		return currentTablePrefix;
+	}
+
+	public void setCurrentTablePrefix(String currentTablePrefix)
+	{
+		this.currentTablePrefix = currentTablePrefix;
+	}
+
+	public boolean isUseFastViewSwitching()
+	{
+		return useFastViewSwitching;
+	}
+
+	public void setUseFastViewSwitching(boolean useViews)
+	{
+		this.useFastViewSwitching = useViews;
+	}
+
+	public String getBackupTablePrefix()
+	{
+		return backupTablePrefix;
+	}
+
+	public void setBackupTablePrefix(String backupTablePrefix)
+	{
+		this.backupTablePrefix = backupTablePrefix;
+	}
+
+	public MonetDBTable getCurrentTable()
 	{
 		for (MonetDBTable table : monetDBTables)
 			if (!table.isTempTable())
@@ -123,5 +204,20 @@ public class CopyTable
 		}
 
 		return null;
+	}
+
+	public String getToViewSql()
+	{
+		String sql = "";
+
+		if (StringUtils.isNotEmpty(schema))
+		{
+			sql = MonetDBUtil.quoteMonetDbIdentifier(schema);
+			sql = sql + ".";
+		}
+
+		sql = sql + MonetDBUtil.quoteMonetDbIdentifier(toName);
+
+		return sql;
 	}
 }
