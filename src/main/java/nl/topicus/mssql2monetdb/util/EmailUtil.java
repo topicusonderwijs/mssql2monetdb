@@ -12,6 +12,7 @@ import javax.mail.internet.MimeMessage;
 
 import nl.topicus.mssql2monetdb.CONFIG_KEYS;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
 
 public class EmailUtil
@@ -43,7 +44,7 @@ public class EmailUtil
 		props.put("mail.smtp.port", port);
 		Session session = null;
 		// if username and password is configured, make sure to use authentication
-		if (isNotEmpty(username) && isNotEmpty(password))
+		if (StringUtils.isNotBlank(username) && StringUtils.isNotBlank(password))
 		{
 			props.put("mail.smtp.auth", "true");
 			props.put("mail.smtp.starttls.enable", "true");
@@ -79,8 +80,4 @@ public class EmailUtil
 		}
 	}
 	
-	
-	private static boolean isNotEmpty(String string){
-		return string != null && string.trim().length() > 0;
-	}
 }
