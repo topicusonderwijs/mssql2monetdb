@@ -20,8 +20,7 @@ public class EmailUtil
 	private static final Logger LOG = Logger.getLogger(EmailUtil.class);
 
 	/**
-	 * Verstuur een email met een bepaalde message en subject. Data properties meegeven
-	 * want daar staan de email settings in.
+	 * Sends an email with a given message en subject. The dataproperties provide the email settings en therefore have to be given to teh function.
 	 */
 	public static void sendMail(String message, String subject, Properties databaseProperties)
 	{
@@ -31,13 +30,6 @@ public class EmailUtil
 		final String to = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_MAIL_TO.toString());
 		final String server = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_MAIL_SERVER.toString());
 		final String port = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_MAIL_PORT.toString());
-		
-//		LOG.info(server);
-//		LOG.info(port);
-//		LOG.info(username);
-//		LOG.info(password);
-//		LOG.info(from);
-//		LOG.info(to);
 
 		Properties props = new Properties();
 		props.put("mail.smtp.host", server);

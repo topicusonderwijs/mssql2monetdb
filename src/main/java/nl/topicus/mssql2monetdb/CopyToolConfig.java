@@ -104,7 +104,7 @@ public class CopyToolConfig
 		if (isMissing)
 		{
 			LOG.fatal("Missing essential config properties");
-			EmailUtil.sendMail("De volgende properties missen in de configs: " + missingKeys.toString(), "Missing essential config properties in monetdb", config);
+			EmailUtil.sendMail("The following configs are missing: " + missingKeys.toString(), "Missing essential config properties in monetdb", config);
 			System.exit(1);
 		}
 

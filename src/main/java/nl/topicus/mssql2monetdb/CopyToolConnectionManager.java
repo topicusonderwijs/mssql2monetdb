@@ -52,7 +52,7 @@ public class CopyToolConnectionManager
 		catch (ClassNotFoundException e)
 		{
 			LOG.fatal("Unable to load MonetDB JDBC driver");
-			EmailUtil.sendMail("Unable to load MonetDB JDBC driver met de volgende error melding: "+ e.getStackTrace(), "Unable to load MonetDB JDBC driver in monetdb", databaseProperties);
+			EmailUtil.sendMail("Unable to load MonetDB JDBC driverwith the following error: "+ e.getStackTrace(), "Unable to load MonetDB JDBC driver in monetdb", databaseProperties);
 			System.exit(1);
 		}
 
@@ -63,7 +63,7 @@ public class CopyToolConnectionManager
 		catch (ClassNotFoundException e)
 		{
 			LOG.fatal("Unable to load MS SQL jTDS JDBC driver");
-			EmailUtil.sendMail("Unable to load MS SQL jTDS JDBC driver met de volgende error melding: "+ e.toString(), "Unable to load MS SQL jTDS JDBC driver in monetdb", databaseProperties);
+			EmailUtil.sendMail("Unable to load MS SQL jTDS JDBC driver with the following error: "+ e.getStackTrace(), "Unable to load MS SQL jTDS JDBC driver in monetdb", databaseProperties);
 			System.exit(1);
 		}
 
@@ -102,7 +102,7 @@ public class CopyToolConnectionManager
 		catch (SQLException e)
 		{
 			LOG.fatal("Unable to open connection to MS SQL server", e);
-			EmailUtil.sendMail("Unable to open connection to MS SQL server met de volgende error melding: "+ e.toString(), "Unable to open connection to MS SQL server in monetdb", databaseProperties);
+			EmailUtil.sendMail("Unable to open connection to MS SQL server with the following error: "+ e.getStackTrace(), "Unable to open connection to MS SQL server in monetdb", databaseProperties);
 			System.exit(1);
 		}
 
