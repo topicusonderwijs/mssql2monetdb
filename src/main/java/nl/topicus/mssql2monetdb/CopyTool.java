@@ -10,6 +10,7 @@ import java.util.HashMap;
 
 import nl.cwi.monetdb.mcl.io.BufferedMCLReader;
 import nl.cwi.monetdb.mcl.io.BufferedMCLWriter;
+import nl.topicus.mssql2monetdb.util.EmailUtil;
 import nl.topicus.mssql2monetdb.util.MonetDBUtil;
 import nl.topicus.mssql2monetdb.util.MssqlUtil;
 
@@ -69,6 +70,7 @@ public class CopyTool
 					catch (SQLException e)
 					{
 						LOG.error("Unable to copy data from table '" + table.getFromName() + "'", e);
+						EmailUtil.sendMail("Unable to copy data from table" + table.getFromName() + "met de volgende foutmelding: "+ e.toString(), "Unable to copy data from table in monetdb", config.getDatabaseProperties());
 					}
 				}
 
@@ -93,6 +95,7 @@ public class CopyTool
 					catch (SQLException e)
 					{
 						LOG.error("Unable to create view '" + copyTable.getToViewSql() + "'", e);
+						EmailUtil.sendMail("Unable to create view" + copyTable.getToViewSql() + "met de volgende foutmelding: "+ e.toString(), "Unable to create view in monetdb", config.getDatabaseProperties());
 					}
 				}
 			}
@@ -181,6 +184,8 @@ public class CopyTool
 			catch (Exception e)
 			{
 				LOG.error("Copying data failed", e);
+
+				EmailUtil.sendMail("Copying data failed met de volgende foutmelding: "+ e.getStackTrace(), "Copying failed in monetdb", config.getDatabaseProperties());
 			}
 		}
 		else
@@ -192,6 +197,8 @@ public class CopyTool
 			catch (SQLException e)
 			{
 				LOG.error("Copying data failed", e);
+				
+				EmailUtil.sendMail("Copying data failed met de volgende foutmelding: "+ e.getStackTrace(), "Copying failed in monetdb", config.getDatabaseProperties());
 
 				// print full chain of exceptions
 				SQLException nextException = e.getNextException();
@@ -260,6 +267,8 @@ public class CopyTool
 		catch (SQLException e)
 		{
 			LOG.error("Error copying temp table to current table", e);
+
+			EmailUtil.sendMail("Error copying temp table to current table met de volgende foutmelding: "+ e.getStackTrace(), "Error copying temp table to current table in monetdb", config.getDatabaseProperties());
 		}
 
 		LOG.info("Finished copying the temp table to the result table");
