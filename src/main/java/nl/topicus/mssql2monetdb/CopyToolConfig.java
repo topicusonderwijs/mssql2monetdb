@@ -33,6 +33,7 @@ public class CopyToolConfig
 	public CopyToolConfig(String args[])
 	{
 		PropertyConfigurator.configure("log4j.properties");
+		LOG.info("Started logging of the MSSQL2MonetDB copy tool");
 
 		Options options = new Options();
 
