@@ -2,10 +2,13 @@ package nl.topicus.mssql2monetdb;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map.Entry;
 import java.util.Properties;
+
+import nl.topicus.mssql2monetdb.util.EmailUtil;
 
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
@@ -86,6 +89,7 @@ public class CopyToolConfig
 	private Properties getAndValidateDatabaseProperties(Properties config)
 	{
 		boolean isMissing = false;
+		ArrayList<String> missingKeys = new ArrayList<String>();
 
 		for (CONFIG_KEYS key : CONFIG_KEYS.values())
 		{
@@ -94,12 +98,14 @@ public class CopyToolConfig
 			{
 				isMissing = true;
 				LOG.error("Missing config property: " + key);
+				missingKeys.add(key.toString());
 			}
 		}
 
 		if (isMissing)
 		{
 			LOG.fatal("Missing essential config properties");
+			EmailUtil.sendMail("The following configs are missing: " + missingKeys.toString(), "Missing essential config properties in monetdb", config);
 			System.exit(1);
 		}
 
@@ -201,6 +207,8 @@ public class CopyToolConfig
 		// verify each specified has a from and to name and add temp tables
 		// and add temptable configuration if copyViaTempTable
 		Iterator<Entry<String, CopyTable>> iter = tablesToCopy.entrySet().iterator();
+		ArrayList<String> missingResultTables = new ArrayList<String>(); 
+		ArrayList<String> missingNames = new ArrayList<String>(); 
 		while (iter.hasNext())
 		{
 			Entry<String, CopyTable> entry = iter.next();
@@ -209,6 +217,7 @@ public class CopyToolConfig
 			if (table.getCurrentTable() == null)
 			{
 				LOG.error("Configuration for '" + id + "' is missing a result table");
+				missingResultTables.add(id);
 				iter.remove();
 				continue;
 			}
@@ -216,6 +225,7 @@ public class CopyToolConfig
 			if (StringUtils.isEmpty(table.getFromName()))
 			{
 				LOG.error("Configuration for '" + id + "' is missing name of from table");
+				missingNames.add(id);
 				iter.remove();
 				continue;
 			}
@@ -237,9 +247,20 @@ public class CopyToolConfig
 			}
 		}
 
+		if(!missingResultTables.isEmpty())
+		{
+			EmailUtil.sendMail("Configuration is missing a result table: " + missingResultTables.toString(), "Configuration is missing a result table in monetdb", config);
+		}
+		
+		if(!missingNames.isEmpty())
+		{
+			EmailUtil.sendMail("Configuration is missing name of from table : " + missingNames.toString(), "Configuration is missing name of from table in monetdb", config);
+		}
+
 		if (tablesToCopy.size() == 0)
 		{
 			LOG.error("Configuration has specified NO tables to copy!");
+			EmailUtil.sendMail("Configuration has specified NO tables to copy!", "Configuration has specified NO tables to copy in monetdb", config);
 		}
 		else
 		{

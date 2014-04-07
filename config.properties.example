@@ -20,6 +20,15 @@ table.example.schema = sys
 table.example.create = true
 table.example.truncate = true
 
+# Mail settings
+monetdb.mail.sendmail=true
+monetdb.mail.to=my.name@something.com
+monetdb.mail.from=from@someone.com
+monetdb.mail.server=1.1.1.1
+monetdb.mail.port=8888
+monetdb.mail.username=
+monetdb.mail.password=
+
 # use tmp_tables to copy the data to so we can recreate the 
 # to-table for faster data transfer to the end table which 
 # reduces down-time

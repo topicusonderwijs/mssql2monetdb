@@ -11,7 +11,15 @@ public enum CONFIG_KEYS
 	MONETDB_PASSWORD("monetdb.password"),
 	MONETDB_SERVER("monetdb.server"),
 	MONETDB_DATABASE("monetdb.database"),
+	MONETDB_MAIL_SENDMAIL("monetdb.mail.sendmail"),
+	MONETDB_MAIL_TO("monetdb.mail.to"),
+	MONETDB_MAIL_FOM("monetdb.mail.from"),
+	MONETDB_MAIL_SERVER("monetdb.mail.server"),
+	MONETDB_MAIL_PORT("monetdb.mail.port"),
+	MONETDB_MAIL_USERNAME("monetdb.mail.username"),
+	MONETDB_MAIL_PASSWORD("monetdb.mail.password"),
 	BATCH_SIZE("batch.size", false);
+
 
 	private final String key;
 
