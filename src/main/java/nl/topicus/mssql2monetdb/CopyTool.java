@@ -29,7 +29,8 @@ public class CopyTool
 	 */
 	public static void main(String[] args)
 	{
-		LOG.info("Started MSSQL2MonetDB copy tool");
+		//the log files is not yet inistialized
+		System.out.println("Started MSSQL2MonetDB copy tool");
 
 		// run tool
 		(new CopyTool(new CopyToolConfig(args))).run();
