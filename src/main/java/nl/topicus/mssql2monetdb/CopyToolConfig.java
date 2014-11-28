@@ -200,6 +200,26 @@ public class CopyToolConfig
 			{
 				table.setUseFastViewSwitching(boolValue);
 			}
+			else if (key.equals("uselockedmode"))
+			{
+				table.setUseLockedMode(boolValue);
+			}
+			else if (key.equals("copymethod"))
+			{
+				propValue = propValue.toLowerCase();
+				if (propValue.equals("copyinto"))
+				{
+					table.setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
+				}
+				else if (propValue.equals("copyintoviatempfile") || propValue.equals("copyintowithtempfile") || propValue.equals("copyintotempfile"))
+				{
+					table.setCopyMethod(CopyTable.COPY_METHOD_COPYINTO_VIA_TEMP_FILE);
+				}
+				else if (propValue.startsWith("insert"))
+				{
+					table.setCopyMethod(CopyTable.COPY_METHOD_INSERT);
+				}
+			}
 
 			tablesToCopy.put(id, table);
 		}

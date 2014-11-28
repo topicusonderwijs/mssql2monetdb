@@ -1,5 +1,9 @@
 package nl.topicus.mssql2monetdb;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.sql.Clob;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -180,7 +184,18 @@ public class CopyTool
 		{
 			try
 			{
-				copyDataWithCopyInto(copyToTable, resultSet, metaData, rowCount);
+				copyDataWithCopyInto(copyToTable, resultSet, metaData, rowCount, table.isUseLockedMode());
+			}
+			catch (Exception e)
+			{
+				LOG.error("Copying data failed", e);
+				EmailUtil.sendMail("Copying data failed with the following error: "+ e.getStackTrace(), "Copying failed in monetdb", config.getDatabaseProperties());
+			}
+		}
+		else if (table.getCopyMethod() == CopyTable.COPY_METHOD_COPYINTO_VIA_TEMP_FILE)
+		{
+			try {
+				copyDataWithCopyIntoViaTempFile(copyToTable, resultSet, metaData, rowCount, table.isUseLockedMode());
 			}
 			catch (Exception e)
 			{
@@ -272,9 +287,99 @@ public class CopyTool
 
 		LOG.info("Finished copying the temp table to the result table");
 	}
+	
+	private void copyDataWithCopyIntoViaTempFile (MonetDBTable monetDBTable, ResultSet resultSet,
+			ResultSetMetaData metaData, long rowCount, boolean useLockedMode) throws Exception
+	{
+		LOG.info("Using COPY INTO VIA TEMP FILE to copy data to table " + monetDBTable.getToTableSql() + "...");
+	
+		File temp = File.createTempFile("table_" + monetDBTable.getName(), ".csv");		
+		LOG.info("Writing data to temp file: " + temp.getAbsolutePath());
+		
+		BufferedWriter bw = new BufferedWriter(new FileWriter(temp));
+
+		long startTime = System.currentTimeMillis();
+		long insertCount = 0;
+		int columnCount = metaData.getColumnCount();
+		
+		while (resultSet.next())
+		{
+			for (int i = 1; i <= columnCount; i++)
+			{
+				Object value = resultSet.getObject(i);
+				String valueStr = "";
+
+				if (value == null)
+				{
+					valueStr = "";
+				}
+				else
+				{
+					valueStr = value.toString();
+
+					// escape \ with \\
+					valueStr = valueStr.replaceAll("\\\\", "\\\\\\\\");
+
+					// escape " with \"
+					valueStr = valueStr.replaceAll("\"", "\\\\\"");
+				}
+
+				bw.write("\"" + valueStr + "\"");
+
+				// column separator (not for last column)
+				if (i < columnCount)
+				{
+					bw.write(",");
+				}
+			}
+
+			// record separator
+			bw.newLine();
+
+			insertCount++;
+
+			if (insertCount % 100000 == 0)
+			{
+				bw.flush();
+				printInsertProgress(startTime, insertCount, rowCount);
+			}
+		}
+		bw.flush();
+		bw.close();
+		printInsertProgress(startTime, insertCount, rowCount);
+
+		LOG.info("Finalising COPY INTO... this may take a while!");
+		
+		Statement copyStmt =
+				CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
+		
+		String query =
+			"COPY INTO " + monetDBTable.getToTableSql()
+				+ " FROM '" + temp.getAbsolutePath() + "' USING DELIMITERS ',','\\n','\"' NULL AS ''";
+				
+		if (useLockedMode)
+		{
+			query += " LOCKED";
+		}
+		
+		query += ";";
+		
+		// execute COPY INTO statement
+		copyStmt.execute(query);
+		
+		copyStmt.close();
+		
+		try {
+			temp.delete();
+		} catch (SecurityException e) {
+			// don't care
+		}	
+		
+		LOG.info("Finished copying data");	
+	}
 
 	private void copyDataWithCopyInto(MonetDBTable monetDBTable, ResultSet resultSet,
-			ResultSetMetaData metaData, long rowCount) throws Exception
+			ResultSetMetaData metaData, long rowCount, boolean useLockedMode) throws Exception
 	{
 		LOG.info("Using COPY INTO to copy data to table " + monetDBTable.getToTableSql() + "...");
 
@@ -289,7 +394,14 @@ public class CopyTool
 
 		String query =
 			"COPY INTO " + monetDBTable.getToTableSql()
-				+ " FROM STDIN USING DELIMITERS ',','\\n','\"' NULL AS '';";
+				+ " FROM STDIN USING DELIMITERS ',','\\n','\"' NULL AS ''";
+				
+		if (useLockedMode)
+		{
+			query += " LOCKED";
+		}
+		
+		query += ";";
 
 		// the leading 's' is essential, since it is a protocol
 		// marker that should not be omitted, likewise the
@@ -414,7 +526,7 @@ public class CopyTool
 						values[i - 1] = "NULL";
 					}
 				}
-				else if (value instanceof String || value instanceof Timestamp)
+				else if (value instanceof String || value instanceof Timestamp || value instanceof Clob)
 				{
 					values[i - 1] = MonetDBUtil.quoteMonetDbValue(value.toString());
 				}

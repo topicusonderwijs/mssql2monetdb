@@ -175,7 +175,12 @@ public class MonetDBUtil
 		LOG.info("Table '" + monetDBTable.getToTableSql() + "' created");
 
 		// fresh table so we can use COPY INTO since we know its ok
-		monetDBTable.getCopyTable().setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
+		// we only do this if the copy method has not already been explicitly set
+		CopyTable copyTable = monetDBTable.getCopyTable();
+		if (copyTable.getCopyMethod() == CopyTable.COPY_METHOD_NOTSET)
+		{
+			monetDBTable.getCopyTable().setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
+		}
 	}
 
 	/**
