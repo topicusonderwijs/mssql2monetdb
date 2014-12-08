@@ -354,7 +354,7 @@ public class CopyTool
 				CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
 		
 		String query =
-			"COPY INTO " + monetDBTable.getToTableSql()
+			"COPY " + insertCount + " RECORDS INTO " + monetDBTable.getToTableSql()
 				+ " FROM '" + temp.getAbsolutePath() + "' USING DELIMITERS ',','\\n','\"' NULL AS ''";
 				
 		if (useLockedMode)
