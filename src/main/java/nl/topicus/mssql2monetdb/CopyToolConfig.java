@@ -2,6 +2,9 @@ package nl.topicus.mssql2monetdb;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -30,8 +33,41 @@ public class CopyToolConfig
 	private Properties databaseProperties;
 
 	private int batchSize = DEFAULT_BATCH_SIZE;
+	
+	private String jobId;
+	
+	private String schedulerTable;
+	
+	private String schedulerColumn;
+	
+	private boolean allowMultipleInstances = false;
+	
+	private File configFile;
 
 	private HashMap<String, CopyTable> tablesToCopy = new HashMap<String, CopyTable>();
+	
+	public static String sha1Checksum (File file) throws NoSuchAlgorithmException, IOException
+	{
+		MessageDigest md = MessageDigest.getInstance("SHA1");
+	    FileInputStream fis = new FileInputStream(file);
+	    byte[] dataBytes = new byte[1024];
+	 
+	    int nread = 0; 
+	 
+	    while ((nread = fis.read(dataBytes)) != -1) {
+	      md.update(dataBytes, 0, nread);
+	    };
+	 
+	    byte[] mdbytes = md.digest();
+	 
+	    //convert the byte to hex format
+	    StringBuffer sb = new StringBuffer("");
+	    for (int i = 0; i < mdbytes.length; i++) {
+	    	sb.append(Integer.toString((mdbytes[i] & 0xff) + 0x100, 16).substring(1));
+	    }
+	    
+	    return sb.toString();
+	}
 
 	public CopyToolConfig(String args[])
 	{
@@ -67,7 +103,7 @@ public class CopyToolConfig
 			return;
 		}
 
-		File configFile = new File(cmd.getOptionValue("config"));
+		configFile = new File(cmd.getOptionValue("config"));
 		LOG.info("Using config file: " + configFile.getAbsolutePath());
 
 		Properties config = new Properties();
@@ -107,6 +143,20 @@ public class CopyToolConfig
 			LOG.fatal("Missing essential config properties");
 			EmailUtil.sendMail("The following configs are missing: " + missingKeys.toString(), "Missing essential config properties in monetdb", config);
 			System.exit(1);
+		}
+		
+		jobId = config.getProperty(CONFIG_KEYS.JOB_ID.toString());
+		
+		// check if scheduler has been specified
+		schedulerTable = config.getProperty(CONFIG_KEYS.SCHEDULER_TABLE.toString());
+		schedulerColumn = config.getProperty(CONFIG_KEYS.SCHEDULER_COLUMN.toString());
+		
+		// check if multiple instances of the same job can be running concurrently
+		String allowMultipleInstancesStr = config.getProperty(CONFIG_KEYS.ALLOW_MULTIPLE_INSTANCES.toString());
+		if (!StringUtils.isEmpty(allowMultipleInstancesStr))
+		{
+			allowMultipleInstancesStr = allowMultipleInstancesStr.toLowerCase();		
+			allowMultipleInstances = (allowMultipleInstancesStr.equals("yes") || allowMultipleInstancesStr.equals("true"));
 		}
 
 		// check if batch size has been specified
@@ -304,7 +354,27 @@ public class CopyToolConfig
 	{
 		this.databaseProperties = databaseProperties;
 	}
+	
+	public String getSchedulerTable ()
+	{
+		return this.schedulerTable;
+	}
+	
+	public String getSchedulerColumn ()
+	{
+		return this.schedulerColumn;
+	}
+	
+	public boolean isSchedulingEnabled ()
+	{
+		return (!StringUtils.isEmpty(this.schedulerTable) && !StringUtils.isEmpty(this.schedulerColumn));
+	}
 
+	public File getConfigFile ()
+	{
+		return this.configFile;
+	}
+	
 	public int getBatchSize()
 	{
 		return batchSize;
@@ -318,6 +388,37 @@ public class CopyToolConfig
 	public HashMap<String, CopyTable> getTablesToCopy()
 	{
 		return tablesToCopy;
+	}
+	
+	public String getJobId ()
+	{
+		if (StringUtils.isEmpty(jobId))
+		{		
+			jobId = getConfigChecksum();
+		}
+				
+		return "job-" + jobId;
+	}
+	
+	public String getConfigChecksum ()
+	{
+		String checksum = null;
+		
+		try {
+			checksum = sha1Checksum(this.configFile);
+		} catch (NoSuchAlgorithmException | IOException e) {
+			LOG.warn("Unable to calculate SHA-1 checksum of config file");
+			
+			// default to using file size
+			checksum = String.valueOf(this.configFile.length());
+		}
+		
+		return checksum;
+	}
+	
+	public boolean allowMultipleInstances ()
+	{
+		return this.allowMultipleInstances;
 	}
 
 }

@@ -30,6 +30,12 @@ public class EmailUtil
 		final String to = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_MAIL_TO.toString());
 		final String server = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_MAIL_SERVER.toString());
 		final String port = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_MAIL_PORT.toString());
+		
+		if (StringUtils.isEmpty(server) || StringUtils.isEmpty(port))
+		{
+			LOG.warn("Not sending e-mail, no e-mail properties set");
+			return;
+		}
 
 		Properties props = new Properties();
 		props.put("mail.smtp.host", server);
