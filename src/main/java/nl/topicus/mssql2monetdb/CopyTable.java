@@ -17,9 +17,13 @@ import org.apache.commons.lang.StringUtils;
  */
 public class CopyTable
 {
+	public static final int COPY_METHOD_NOTSET = Integer.MIN_VALUE;
+	
 	public static final int COPY_METHOD_INSERT = 0;
 
 	public static final int COPY_METHOD_COPYINTO = 1;
+	
+	public static final int COPY_METHOD_COPYINTO_VIA_TEMP_FILE = 2;
 
 	// contains the actual result table and possible a temp table
 	private List<MonetDBTable> monetDBTables = new ArrayList<MonetDBTable>();
@@ -37,7 +41,7 @@ public class CopyTable
 
 	private String schema;
 
-	private int copyMethod = COPY_METHOD_INSERT;
+	private int copyMethod = COPY_METHOD_NOTSET;
 
 	// copies the table to a temp table and then replaces the 'to' table with the temp
 	// table to reduce down-time
@@ -55,6 +59,9 @@ public class CopyTable
 	// view when data copying is complete resulting in almost no down-time of your
 	// database table
 	private boolean useFastViewSwitching = false;
+	
+	// this will do COPY INTO with LOCKED MODE
+	private boolean useLockedMode = false;
 
 	public void setCopyMethod(int copyMethod)
 	{
@@ -184,6 +191,16 @@ public class CopyTable
 	public void setBackupTablePrefix(String backupTablePrefix)
 	{
 		this.backupTablePrefix = backupTablePrefix;
+	}
+	
+	public void setUseLockedMode(boolean useLockedMode)
+	{
+		this.useLockedMode = useLockedMode;
+	}
+	
+	public boolean isUseLockedMode ()
+	{
+		return this.useLockedMode;
 	}
 
 	public MonetDBTable getCurrentTable()

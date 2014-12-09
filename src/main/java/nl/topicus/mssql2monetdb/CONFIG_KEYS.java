@@ -2,6 +2,7 @@ package nl.topicus.mssql2monetdb;
 
 public enum CONFIG_KEYS
 {
+	JOB_ID("job.id"),
 	MSSQL_USER("mssql.user"),
 	MSSQL_PASSWORD("mssql.password"),
 	MSSQL_SERVER("mssql.server"),
@@ -18,9 +19,11 @@ public enum CONFIG_KEYS
 	MONETDB_MAIL_PORT("monetdb.mail.port"),
 	MONETDB_MAIL_USERNAME("monetdb.mail.username"),
 	MONETDB_MAIL_PASSWORD("monetdb.mail.password"),
+	ALLOW_MULTIPLE_INSTANCES("allow.multiple.instances", false),
+	SCHEDULER_TABLE("scheduler.table", false),
+	SCHEDULER_COLUMN("scheduler.column", false),
 	BATCH_SIZE("batch.size", false);
-
-
+	
 	private final String key;
 
 	private final boolean required;

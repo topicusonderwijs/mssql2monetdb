@@ -1,6 +1,13 @@
 # indicates how many records should be insert at a time into MonetDB
 batch.size = 10000
 
+# Scheduling options
+# With this the tool will check this table/column in SQL server and determine
+# if there have been any changes since the last run
+#
+# scheduler.table = updated
+# scheduler.column = last_updatetime
+
 mssql.user = dbuser
 mssql.password = dbpassword
 mssql.server = localhost
