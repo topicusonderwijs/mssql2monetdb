@@ -32,6 +32,8 @@ import org.apache.log4j.Logger;
 public class CopyTool
 {
 	private static final Logger LOG = Logger.getLogger(CopyTool.class);
+	
+	private static final int SLEEP_INCREMENT = 1 * 60 * 1000;
 
 	private CopyToolConfig config;
 
@@ -49,26 +51,37 @@ public class CopyTool
 		//the log files is not yet inistialized
 		System.out.println("Started MSSQL2MonetDB copy tool");
 
+		CopyToolConfig config = null;
+		
+		// load config
+		try {
+			config = new CopyToolConfig(args);
+		} catch (ConfigException e) {
+			System.exit(1);
+		}
+		
+		// setup tool
+		CopyTool tool = new CopyTool();
+		
 		// run tool
-		(new CopyTool(new CopyToolConfig(args))).run();
-	}
-	
-	
-
-	public CopyTool(CopyToolConfig config)
-	{
-		this.config = config;
-		if (config == null)
-		{
-			LOG.error("CopyToolConfig cannot be null");
+		try {
+			tool.run(config);
+		} catch (CopyToolException e) {
+			LOG.fatal(e.getMessage(), e);
 			System.exit(1);
 		}
 	}
-
 	
 	
-	public void run()
+	
+	public void run(CopyToolConfig config) throws CopyToolException
 	{
+		if (config == null)
+		{
+			throw new CopyToolException("CopyToolConfig cannot be null");
+		}
+		this.config = config;
+		
 		// load database drivers
 		loadDatabaseDrivers();
 		
@@ -88,6 +101,55 @@ public class CopyTool
 			EmailUtil.sendMail("Unable to start Copy job with the following error: "+ e.getStackTrace(), "Unable to copy data from table in monetdb", config.getDatabaseProperties());
 		}
 		
+		// how should we run? with scheduler (i.e. infinite) or one-time
+		if (config.isSchedulerEnabled()) 
+		{
+			int interval = config.getSchedulerInterval() * 1000;
+			int timeLeft = interval;
+			
+			while(true)
+			{
+				// do copy
+				try {
+					doCopy();
+				} catch (Exception e) {
+					// we catch every exception because we don't want to fail
+					// out of the scheduler
+					LOG.error("Caught exception: " + e.getMessage(), e);
+				}
+
+				LOG.info("Scheduling enabled, sleeping for " + (interval/1000) + " seconds until next run");
+				timeLeft = interval;
+				
+				// sleep in increments of 5 minutes
+				while(timeLeft > 0)
+				{
+					// do sleep
+					try {
+						Thread.sleep((timeLeft > SLEEP_INCREMENT) ? SLEEP_INCREMENT : timeLeft);
+					} catch (InterruptedException e) {
+						LOG.warn("Scheduled waiting time got interrupted!");
+					}
+					
+					timeLeft = timeLeft - SLEEP_INCREMENT;
+					if (timeLeft > 0)
+						LOG.info("Still sleeping " + (timeLeft/1000) + " seconds until next run");
+				}
+				
+				LOG.info("Starting next run!");
+			}
+		}
+		else
+		{
+			// do one-time copy
+			doCopy();
+		}
+
+		markAsFinished();
+	}
+	
+	private void doCopy () throws CopyToolException
+	{
 		HashMap<String, CopyTable> tablesToCopy = config.getTablesToCopy();
 		if (tablesToCopy.size() > 0)
 		{
@@ -95,12 +157,15 @@ public class CopyTool
 			
 			// check if scheduling is enabled and if so, if there is any new data
 			boolean anyErrors = false;
+			
+			/*
 			if (config.isSchedulingEnabled() && !checkForNewData())
 			{
 				LOG.info("No indication of new data from scheduling source '" + config.getSchedulerTable() + "." + config.getSchedulerColumn() + "'");
 			}
 			else
 			{
+			*/
 				// check if all MSSQL tables have data and stop the copy if one doesn't
 				if (MssqlUtil.allMSSQLTablesHaveData(tablesToCopy))
 				{
@@ -149,19 +214,19 @@ public class CopyTool
 						}
 					}
 				}
+			/*
 			}
+			
 			
 			// write out info for schedule
 			if (config.isSchedulingEnabled() && !anyErrors)
 			{
 				writeScheduleInfo(lastRunValue, lastRunColType);
 			}
+			*/
 		}
 
 		CopyToolConnectionManager.getInstance().closeConnections();
-		
-		markAsFinished();
-
 		LOG.info("Finished!");
 	}
 	
@@ -223,6 +288,7 @@ public class CopyTool
 	 * it should insert a new row in the scheduler source to indicate to this
 	 * tool that there is a new data to be loaded.
 	 */
+	/*
 	private boolean checkForNewData ()
 	{		
 		LOG.info("Checking scheduling source '" + config.getSchedulerSource() + "." + 
@@ -370,6 +436,7 @@ public class CopyTool
 	    // no new data
 		return false;
 	}
+	*/
 	
 	/**
 	 * Writes the lastrun info for the scheduling to disk
@@ -890,7 +957,7 @@ public class CopyTool
 			+ timeLeft + " seconds");
 	}
 	
-	private void loadDatabaseDrivers ()
+	private void loadDatabaseDrivers () throws CopyToolException
 	{
 		// make sure JDBC drivers are loaded
 		try
@@ -899,9 +966,8 @@ public class CopyTool
 		}
 		catch (ClassNotFoundException e)
 		{
-			LOG.fatal("Unable to load MonetDB JDBC driver");
 			EmailUtil.sendMail("Unable to load MonetDB JDBC driverwith the following error: "+ e.getStackTrace(), "Unable to load MonetDB JDBC driver in monetdb", config.getDatabaseProperties());
-			System.exit(1);
+			throw new CopyToolException("Unable to load MonetDB JDBC driver");
 		}
 
 		try
@@ -910,9 +976,8 @@ public class CopyTool
 		}
 		catch (ClassNotFoundException e)
 		{
-			LOG.fatal("Unable to load MS SQL jTDS JDBC driver");
 			EmailUtil.sendMail("Unable to load MS SQL jTDS JDBC driver with the following error: "+ e.getStackTrace(), "Unable to load MS SQL jTDS JDBC driver in monetdb", config.getDatabaseProperties());
-			System.exit(1);
+			throw new CopyToolException("Unable to load jTDS JDBC driver");
 		}
 	}
 

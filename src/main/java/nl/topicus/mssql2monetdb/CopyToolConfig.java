@@ -38,11 +38,9 @@ public class CopyToolConfig
 	
 	private String jobId;
 	
-	private String schedulerSource;
+	private boolean schedulerEnabled;
 	
-	private String schedulerTable;
-	
-	private String schedulerColumn;
+	private int schedulerInterval;
 	
 	private boolean allowMultipleInstances = false;
 	
@@ -51,6 +49,17 @@ public class CopyToolConfig
 	private HashMap<String, SourceDatabase> sourceDatabases = new HashMap<String, SourceDatabase>(); 
 	
 	private HashMap<String, CopyTable> tablesToCopy = new HashMap<String, CopyTable>();
+	
+	public static boolean getBooleanProperty (Properties props, String key)
+	{
+		String value = props.getProperty(key);
+		if (StringUtils.isEmpty(value))
+			return false;
+		
+		value = value.toLowerCase();
+		
+		return (value.startsWith("y") || value.equals("true"));
+	}
 		
 	public static String sha1Checksum (File file) throws NoSuchAlgorithmException, IOException
 	{
@@ -75,7 +84,7 @@ public class CopyToolConfig
 	    return sb.toString();
 	}
 
-	public CopyToolConfig(String args[])
+	public CopyToolConfig(String args[]) throws ConfigException
 	{
 		PropertyConfigurator.configure("log4j.properties");
 		LOG.info("Started logging of the MSSQL2MonetDB copy tool");
@@ -101,7 +110,7 @@ public class CopyToolConfig
 			HelpFormatter formatter = new HelpFormatter();
 			formatter.printHelp("mssql2monetdb", options);
 
-			System.exit(1);
+			throw new ConfigException(e.getMessage());
 		}
 		if (cmd == null)
 		{
@@ -121,7 +130,7 @@ public class CopyToolConfig
 		{
 			LOG.error("ERROR: unable to read config file");
 			e.printStackTrace();
-			System.exit(1);
+			throw new ConfigException("Unable to read config file");
 		}
 		
 		// replace environment variable references in config
@@ -131,8 +140,10 @@ public class CopyToolConfig
 		this.sourceDatabases = findSourceDatabases(config);
 		this.tablesToCopy = findTablesToCopy(config);
 		
+		findSchedulerProperties(config);
+		
 		// verify scheduling source
-		checkSchedulingSource();
+		//checkSchedulingSource();
 	}
 	
 	private Properties loadEnvironmentVariables (Properties config)
@@ -164,6 +175,7 @@ public class CopyToolConfig
 		return config;
 	}
 	
+	/*
 	private void checkSchedulingSource ()
 	{
 		if (this.isSchedulingEnabled())
@@ -191,9 +203,9 @@ public class CopyToolConfig
 			}
 
 		}
-	}
+	}*/
 
-	private Properties getAndValidateDatabaseProperties(Properties config)
+	private Properties getAndValidateDatabaseProperties(Properties config) throws ConfigException
 	{
 		boolean isMissing = false;
 		ArrayList<String> missingKeys = new ArrayList<String>();
@@ -213,15 +225,10 @@ public class CopyToolConfig
 		{
 			LOG.fatal("Missing essential config properties");
 			EmailUtil.sendMail("The following configs are missing: " + missingKeys.toString(), "Missing essential config properties in monetdb", config);
-			System.exit(1);
+			throw new ConfigException("Missing essential config properties");
 		}
 		
 		jobId = config.getProperty(CONFIG_KEYS.JOB_ID.toString());
-		
-		// check if scheduler has been specified
-		schedulerSource = config.getProperty(CONFIG_KEYS.SCHEDULER_SOURCE.toString());
-		schedulerTable = config.getProperty(CONFIG_KEYS.SCHEDULER_TABLE.toString());
-		schedulerColumn = config.getProperty(CONFIG_KEYS.SCHEDULER_COLUMN.toString());
 		
 		// check if multiple instances of the same job can be running concurrently
 		String allowMultipleInstancesStr = config.getProperty(CONFIG_KEYS.ALLOW_MULTIPLE_INSTANCES.toString());
@@ -246,6 +253,76 @@ public class CopyToolConfig
 		}
 
 		return config;
+	}
+	
+	private void findSchedulerProperties (Properties config)
+	{
+		schedulerEnabled = getBooleanProperty(config, CONFIG_KEYS.SCHEDULER_ENABLED.toString());
+		
+		if (!schedulerEnabled)
+			return;
+		
+		String intervalStr = config.getProperty(CONFIG_KEYS.SCHEDULER_INTERVAL.toString());
+		
+		if (StringUtils.isEmpty(intervalStr))
+		{
+			schedulerEnabled = false;
+			LOG.warn("Scheduler has been enabled in configuration but no interval has been specified. Disabled scheduler!");
+			return;
+		}
+		
+		intervalStr = intervalStr.toLowerCase().trim();
+		
+		// try to convert interval into seconds
+		int interval = 0;
+		try {
+			interval = Integer.parseInt(intervalStr);
+		} catch (NumberFormatException e) {
+			// okay, so not a number
+		}	
+		
+		// not a valid interval yet? try other options
+		if (interval == 0)
+		{
+			if (intervalStr.startsWith("every "))
+				intervalStr = intervalStr.substring(6);
+			
+			// example: 5 minutes => [0]: 5, [1]: minutes
+			String[] split = intervalStr.split(" ");
+			if (split.length >= 2)
+			{
+				String unit = split[1].toLowerCase();
+				try {
+					interval = Integer.parseInt(split[0]);
+					
+					if (unit.startsWith("minute"))
+						interval = interval * 60;
+					else if (unit.startsWith("hour"))
+						interval = interval * 60 * 60;
+					else if (unit.startsWith("day"))
+						interval = interval * 60 * 60 * 24;
+					else
+					{
+						LOG.warn("Unknown scheduler interval unit '" + unit + "'");
+						interval = 0;
+					}
+					
+				} catch (NumberFormatException e) {
+					// ok, so not a number, we give up!
+				}
+			}
+		}
+		
+		// check if a valid interval has been found
+		if (interval == 0)
+		{
+			schedulerEnabled = false;
+			LOG.warn("Unknown scheduler interval '" + intervalStr + "' specified. Disabled scheduler!");
+		}
+		
+		LOG.info("Scheduler enabled, interval: " + interval + " seconds");
+		schedulerInterval = interval;
+		
 	}
 	
 	private HashMap<String, SourceDatabase> findSourceDatabases (Properties config)
@@ -572,24 +649,14 @@ public class CopyToolConfig
 		this.databaseProperties = databaseProperties;
 	}
 	
-	public String getSchedulerTable ()
+	public int getSchedulerInterval ()
 	{
-		return this.schedulerTable;
+		return this.schedulerInterval;
 	}
 	
-	public String getSchedulerSource ()
+	public boolean isSchedulerEnabled ()
 	{
-		return this.schedulerSource;
-	}
-	
-	public String getSchedulerColumn ()
-	{
-		return this.schedulerColumn;
-	}
-	
-	public boolean isSchedulingEnabled ()
-	{
-		return (!StringUtils.isEmpty(this.schedulerTable) && !StringUtils.isEmpty(this.schedulerColumn));
+		return this.schedulerEnabled;
 	}
 
 	public File getConfigFile ()

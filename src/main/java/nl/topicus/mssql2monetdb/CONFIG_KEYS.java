@@ -15,9 +15,8 @@ public enum CONFIG_KEYS
 	MONETDB_MAIL_USERNAME("monetdb.mail.username"),
 	MONETDB_MAIL_PASSWORD("monetdb.mail.password"),
 	ALLOW_MULTIPLE_INSTANCES("allow.multiple.instances", false),
-	SCHEDULER_SOURCE("scheduler.source", false),
-	SCHEDULER_TABLE("scheduler.table", false),
-	SCHEDULER_COLUMN("scheduler.column", false),
+	SCHEDULER_ENABLED("scheduler.enabled", false),
+	SCHEDULER_INTERVAL("scheduler.interval", false),
 	BATCH_SIZE("batch.size", false);
 	
 	private final String key;

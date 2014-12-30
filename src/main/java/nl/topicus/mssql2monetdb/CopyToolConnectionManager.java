@@ -43,7 +43,7 @@ public class CopyToolConnectionManager
 		return instance;
 	}
 
-	public void openConnections(CopyToolConfig config)
+	public void openConnections(CopyToolConfig config) throws CopyToolException
 	{		
 		this.sourceDatabases = config.getSourceDatabases();
 		
@@ -76,9 +76,8 @@ public class CopyToolConnectionManager
 		}
 		catch (SQLException e)
 		{
-			LOG.fatal("Unable to open connection to MonetDB server", e);
 			closeConnections();
-			System.exit(1);
+			throw new CopyToolException("Unable to open connection to MonetDB server", e);
 		}
 
 		monetDbServer = new MapiSocket();

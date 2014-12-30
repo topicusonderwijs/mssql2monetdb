@@ -2,6 +2,17 @@
 batch.size = 10000
 
 # Scheduling options
+#
+# scheduler.enabled = true
+# scheduler.interval = every 5 minutes
+
+# Trigger options
+#
+# trigger.source = db1
+# trigger.table = updated
+# trigger.column = last_updatetime
+
+# Scheduling options
 # With this the tool will check this table/column in SQL server and determine
 # if there have been any changes since the last run
 #
