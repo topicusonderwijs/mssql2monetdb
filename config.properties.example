@@ -11,7 +11,7 @@ batch.size = 10000
 
 # target MonetDB Database:
 monetdb.user = monetdb
-monetdb.password = monetdb
+monetdb.password = ENV:MONETDB_PASSWORD
 monetdb.server = localhost
 monetdb.database = my_monetdb
 

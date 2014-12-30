@@ -123,6 +123,9 @@ public class CopyToolConfig
 			e.printStackTrace();
 			System.exit(1);
 		}
+		
+		// replace environment variable references in config
+		config = loadEnvironmentVariables(config);
 
 		this.databaseProperties = getAndValidateDatabaseProperties(config);
 		this.sourceDatabases = findSourceDatabases(config);
@@ -130,6 +133,35 @@ public class CopyToolConfig
 		
 		// verify scheduling source
 		checkSchedulingSource();
+	}
+	
+	private Properties loadEnvironmentVariables (Properties config)
+	{
+		for(Object key : config.keySet())
+		{
+			String value = config.getProperty(key.toString());
+			
+			// not an environment variable value?
+			if (!value.toLowerCase().startsWith("env:"))
+				continue;
+			
+			// retrieve name of environment variable
+			String envVar = value.substring(4);
+			
+			// get value of environment variable
+			String envValue = System.getenv(envVar);
+			
+			if (StringUtils.isEmpty(envValue))
+			{
+				LOG.warn("Configuration property '" + key.toString() + "' set to empty. Environment variable '" + envVar + "' is empty or not set!");
+				envValue = "";
+			}
+			
+			// set new value of config property
+			config.setProperty(key.toString(), envValue);
+		}
+		
+		return config;
 	}
 	
 	private void checkSchedulingSource ()
