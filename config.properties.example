@@ -5,22 +5,27 @@ batch.size = 10000
 # With this the tool will check this table/column in SQL server and determine
 # if there have been any changes since the last run
 #
+# scheduler.source = db1
 # scheduler.table = updated
 # scheduler.column = last_updatetime
 
-mssql.user = dbuser
-mssql.password = dbpassword
-mssql.server = localhost
-mssql.database = my_db
-# optional instance name
-# mssql.instance = instance_name
-
+# target MonetDB Database:
 monetdb.user = monetdb
 monetdb.password = monetdb
 monetdb.server = localhost
 monetdb.database = my_monetdb
 
+# source MS SQL Server database(s):
+# multiple databases can be specified, each under their own sub-key
+mssql.db1.user = dbuser
+mssql.db1.password = dbpassword
+mssql.db1.server = localhost
+mssql.db1.database = my_db
+# optional instance name
+# mssql.db1.instance = instance_name
+
 # copy a table
+table.example.source = db1
 table.example.from = example_table
 table.example.to = example_table_new
 table.example.schema = sys

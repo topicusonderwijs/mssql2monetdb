@@ -65,8 +65,13 @@ public class CopyTool
 		}
 	}
 
+	
+	
 	public void run()
 	{
+		// load database drivers
+		loadDatabaseDrivers();
+		
 		// check if another instance of this job is already running
 		if (isInstanceRunning() && !config.allowMultipleInstances())
 		{
@@ -86,7 +91,7 @@ public class CopyTool
 		HashMap<String, CopyTable> tablesToCopy = config.getTablesToCopy();
 		if (tablesToCopy.size() > 0)
 		{
-			CopyToolConnectionManager.getInstance().openConnections(config.getDatabaseProperties());
+			CopyToolConnectionManager.getInstance().openConnections(config);
 			
 			// check if scheduling is enabled and if so, if there is any new data
 			boolean anyErrors = false;
@@ -220,7 +225,8 @@ public class CopyTool
 	 */
 	private boolean checkForNewData ()
 	{		
-		LOG.info("Checking scheduling source '" + config.getSchedulerTable() + "." + config.getSchedulerColumn() + "'");
+		LOG.info("Checking scheduling source '" + config.getSchedulerSource() + "." + 
+				config.getSchedulerTable() + "." + config.getSchedulerColumn() + "'");
 		
 		// get value from source
 		Object newValue = null;
@@ -228,7 +234,7 @@ public class CopyTool
 		try 
 		{
 			Statement selectStmt =
-					CopyToolConnectionManager.getInstance().getMssqlConnection().createStatement();
+					CopyToolConnectionManager.getInstance().getMssqlConnection(config.getSchedulerSource()).createStatement();
 			
 			ResultSet res = selectStmt.executeQuery(
 				"SELECT TOP 1 [" + config.getSchedulerColumn() + "] "
@@ -438,7 +444,7 @@ public class CopyTool
 
 		// select data from MS SQL Server
 		Statement selectStmt =
-			CopyToolConnectionManager.getInstance().getMssqlConnection().createStatement();
+			CopyToolConnectionManager.getInstance().getMssqlConnection(table.getSource()).createStatement();
 
 		// get number of rows in table
 		ResultSet resultSet =
@@ -526,6 +532,7 @@ public class CopyTool
 			throws SQLException
 	{
 		boolean tableExists = MonetDBUtil.monetDBTableExists(monetDBTable);
+		
 		// can't auto create?
 		if (tableExists == false && monetDBTable.getCopyTable().create() == false)
 		{
@@ -881,6 +888,32 @@ public class CopyTool
 			+ formatPerc.format(perc) + "%)");
 		LOG.info("Time: " + (totalTime / 1000) + " seconds spent; estimated time left is "
 			+ timeLeft + " seconds");
+	}
+	
+	private void loadDatabaseDrivers ()
+	{
+		// make sure JDBC drivers are loaded
+		try
+		{
+			Class.forName("nl.cwi.monetdb.jdbc.MonetDriver");
+		}
+		catch (ClassNotFoundException e)
+		{
+			LOG.fatal("Unable to load MonetDB JDBC driver");
+			EmailUtil.sendMail("Unable to load MonetDB JDBC driverwith the following error: "+ e.getStackTrace(), "Unable to load MonetDB JDBC driver in monetdb", config.getDatabaseProperties());
+			System.exit(1);
+		}
+
+		try
+		{
+			Class.forName("net.sourceforge.jtds.jdbc.Driver");
+		}
+		catch (ClassNotFoundException e)
+		{
+			LOG.fatal("Unable to load MS SQL jTDS JDBC driver");
+			EmailUtil.sendMail("Unable to load MS SQL jTDS JDBC driver with the following error: "+ e.getStackTrace(), "Unable to load MS SQL jTDS JDBC driver in monetdb", config.getDatabaseProperties());
+			System.exit(1);
+		}
 	}
 
 }

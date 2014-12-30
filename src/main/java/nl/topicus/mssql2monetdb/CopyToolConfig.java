@@ -29,12 +29,16 @@ public class CopyToolConfig
 	private static final Logger LOG = Logger.getLogger(CopyToolConfig.class);
 
 	public static final int DEFAULT_BATCH_SIZE = 10000;
+	
+	public static final String DEFAULT_SOURCE_ID = "_default";
 
 	private Properties databaseProperties;
 
 	private int batchSize = DEFAULT_BATCH_SIZE;
 	
 	private String jobId;
+	
+	private String schedulerSource;
 	
 	private String schedulerTable;
 	
@@ -44,8 +48,10 @@ public class CopyToolConfig
 	
 	private File configFile;
 
-	private HashMap<String, CopyTable> tablesToCopy = new HashMap<String, CopyTable>();
+	private HashMap<String, SourceDatabase> sourceDatabases = new HashMap<String, SourceDatabase>(); 
 	
+	private HashMap<String, CopyTable> tablesToCopy = new HashMap<String, CopyTable>();
+		
 	public static String sha1Checksum (File file) throws NoSuchAlgorithmException, IOException
 	{
 		MessageDigest md = MessageDigest.getInstance("SHA1");
@@ -119,7 +125,40 @@ public class CopyToolConfig
 		}
 
 		this.databaseProperties = getAndValidateDatabaseProperties(config);
+		this.sourceDatabases = findSourceDatabases(config);
 		this.tablesToCopy = findTablesToCopy(config);
+		
+		// verify scheduling source
+		checkSchedulingSource();
+	}
+	
+	private void checkSchedulingSource ()
+	{
+		if (this.isSchedulingEnabled())
+		{
+			if (StringUtils.isEmpty(this.schedulerSource))
+			{
+				if (!this.sourceDatabases.containsKey(DEFAULT_SOURCE_ID))
+				{
+					LOG.warn("No source database has been specified for scheduling table/column and default source does not exist. "
+							+ "Scheduling disabled!");
+					this.schedulerTable = "";
+				}
+				else
+				{
+					this.schedulerSource = DEFAULT_SOURCE_ID;
+				}
+			}
+			else
+			{
+				if (!this.sourceDatabases.containsKey(this.schedulerSource))
+				{
+					LOG.warn("Invalid source database '" + this.schedulerSource + "' specified for scheduling. Disabled scheduling!");
+					this.schedulerTable = "";
+				}
+			}
+
+		}
 	}
 
 	private Properties getAndValidateDatabaseProperties(Properties config)
@@ -148,6 +187,7 @@ public class CopyToolConfig
 		jobId = config.getProperty(CONFIG_KEYS.JOB_ID.toString());
 		
 		// check if scheduler has been specified
+		schedulerSource = config.getProperty(CONFIG_KEYS.SCHEDULER_SOURCE.toString());
 		schedulerTable = config.getProperty(CONFIG_KEYS.SCHEDULER_TABLE.toString());
 		schedulerColumn = config.getProperty(CONFIG_KEYS.SCHEDULER_COLUMN.toString());
 		
@@ -175,6 +215,116 @@ public class CopyToolConfig
 
 		return config;
 	}
+	
+	private HashMap<String, SourceDatabase> findSourceDatabases (Properties config)
+	{
+		HashMap<String, SourceDatabase> sourceDatabases = new HashMap<String, SourceDatabase>();
+		
+		for (Entry<Object, Object> entry : config.entrySet())
+		{
+			String propName = entry.getKey().toString().toLowerCase();
+			String propValue = entry.getValue().toString().trim();
+			
+			String[] split = propName.split("\\.");
+			
+			if (split[0].equals("mssql") == false)
+				continue;
+						
+			String id;
+			String key;
+			if (split.length == 3)
+			{
+				id = split[1];
+				key = split[2];
+			} 
+			else if (split.length == 2)
+			{
+				id = DEFAULT_SOURCE_ID;
+				key = split[1];
+			}
+			else
+			{
+				continue;
+			}
+
+			key = key.toLowerCase().trim();
+			
+			SourceDatabase db = sourceDatabases.get(id);
+			
+			if (db == null)
+			{
+				db = new SourceDatabase();
+				db.setId(id);
+			}
+			
+			if (key.equals("user"))
+			{
+				db.setUser(propValue);
+			}
+			else if (key.equals("password"))
+			{
+				db.setPassword(propValue);
+			}
+			else if (key.equals("server"))
+			{
+				db.setServer(propValue);
+			}
+			else if (key.equals("database"))
+			{
+				db.setDatabase(propValue);
+			}
+			else if (key.equals("instance"))
+			{
+				db.setInstance(propValue);
+			}
+			else if (key.equals("port"))
+			{
+				try 
+				{
+					int portInt = Integer.parseInt(propValue);
+					db.setPort(portInt);
+				}
+				catch (NumberFormatException e)
+				{
+					LOG.warn("Invalid port specified for MSSQL '" + id + "', must be a valid integer!");
+				}
+			}
+			
+			sourceDatabases.put(id, db);
+		}
+		
+		// verify each source database has a database and server specified
+		for(String id : sourceDatabases.keySet())
+		{
+			SourceDatabase db = sourceDatabases.get(id);
+			
+			if (StringUtils.isEmpty(db.getDatabase()))
+			{
+				LOG.warn("MSSQL database with id '" + id + "' is missing the database name in the config!");
+			}
+			
+			if (StringUtils.isEmpty(db.getServer()))
+			{
+				LOG.warn("MSSQL database with id '" + id + "' is missing the server in the config!");
+			}				
+		}
+		
+		if (sourceDatabases.size() == 0)
+		{
+			LOG.error("Configuration has specified NO source databases!");
+			EmailUtil.sendMail("Configuration has specified NO source databases!", "Configuration has specified NO source databases", config);
+		}
+		else
+		{
+			LOG.info("The following databases will be used as sources: ");
+			for (SourceDatabase db : sourceDatabases.values())
+			{
+				LOG.info("* " + db.getId() + ": " + db.getDatabase() + " (" + db.getServer() + ")");
+			}
+		}
+		
+		return sourceDatabases;
+	}
 
 	private HashMap<String, CopyTable> findTablesToCopy(Properties config)
 	{
@@ -198,6 +348,7 @@ public class CopyToolConfig
 			String key = split[2].toLowerCase();
 
 			CopyTable table = tablesToCopy.get(id);
+			
 			// if table does not exist than add new CopyTable with a MonetDBTable
 			if (table == null)
 			{
@@ -205,7 +356,11 @@ public class CopyToolConfig
 				table.getMonetDBTables().add(new MonetDBTable(table));
 			}
 
-			if (key.equals("from"))
+			if (key.equals("source"))
+			{
+				table.setSource(propValue);
+			}
+			else if (key.equals("from"))
 			{
 				table.setFromName(propValue);
 			}
@@ -307,6 +462,36 @@ public class CopyToolConfig
 					+ table.getFromName() + ")");
 				table.getCurrentTable().setName(table.getFromName());
 			}
+			
+			// if no source database has been specified then the default source
+			// is used
+			if (StringUtils.isEmpty(table.getSource()))
+			{
+				// check if default source exists
+				if (sourceDatabases.containsKey(DEFAULT_SOURCE_ID))
+				{
+					table.setSource(DEFAULT_SOURCE_ID);
+					LOG.info("Using default source database for table with id '" + id + "'");
+				}
+				else
+				{
+					LOG.error("Table with id '" + id + "' has not specified a source database and no default source exists in configuration");
+					iter.remove();
+					continue;
+				}
+			}
+			else
+			{
+				// check if source exists
+				if (!sourceDatabases.containsKey(table.getSource()))
+				{
+					LOG.error("Table with id '" + id + "' has specified a source database (" + table.getSource() + ") "
+							+ "which does not exist in configuration");
+					iter.remove();
+					continue;
+				}
+			}
+				
 
 			if (table.isCopyViaTempTable() && table.getTempTable() == null)
 			{
@@ -358,6 +543,11 @@ public class CopyToolConfig
 	public String getSchedulerTable ()
 	{
 		return this.schedulerTable;
+	}
+	
+	public String getSchedulerSource ()
+	{
+		return this.schedulerSource;
 	}
 	
 	public String getSchedulerColumn ()
@@ -419,6 +609,11 @@ public class CopyToolConfig
 	public boolean allowMultipleInstances ()
 	{
 		return this.allowMultipleInstances;
+	}
+	
+	public HashMap<String, SourceDatabase> getSourceDatabases ()
+	{
+		return this.sourceDatabases;
 	}
 
 }

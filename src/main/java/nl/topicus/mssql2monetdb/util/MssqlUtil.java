@@ -26,7 +26,7 @@ public class MssqlUtil
 			{
 				// select data from MS SQL Server
 				Statement selectStmt =
-					CopyToolConnectionManager.getInstance().getMssqlConnection().createStatement();
+					CopyToolConnectionManager.getInstance().getMssqlConnection(table.getSource()).createStatement();
 				// get number of rows in table
 				ResultSet resultSet =
 					selectStmt.executeQuery("SELECT COUNT(*) FROM [" + table.getFromName() + "]");

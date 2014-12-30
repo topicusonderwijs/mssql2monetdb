@@ -33,13 +33,15 @@ public class CopyTable
 	private boolean create = true;
 
 	private boolean drop = false;
+	
+	private String source;
 
 	// secret view name
 	private String toName;
 
 	private String fromName;
 
-	private String schema;
+	private String schema = "sys";
 
 	private int copyMethod = COPY_METHOD_NOTSET;
 
@@ -101,6 +103,16 @@ public class CopyTable
 	public boolean create()
 	{
 		return this.create;
+	}
+	
+	public String getSource ()
+	{
+		return source;
+	}
+	
+	public void setSource(String source)
+	{
+		this.source = source;
 	}
 
 	public String getFromName()
