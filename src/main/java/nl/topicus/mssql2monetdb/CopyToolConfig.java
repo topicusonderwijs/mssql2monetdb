@@ -42,8 +42,6 @@ public class CopyToolConfig
 	
 	private int schedulerInterval;
 	
-	private boolean allowMultipleInstances = false;
-	
 	private File configFile;
 
 	private HashMap<String, SourceDatabase> sourceDatabases = new HashMap<String, SourceDatabase>(); 
@@ -242,14 +240,6 @@ public class CopyToolConfig
 		}
 		
 		jobId = config.getProperty(CONFIG_KEYS.JOB_ID.toString());
-		
-		// check if multiple instances of the same job can be running concurrently
-		String allowMultipleInstancesStr = config.getProperty(CONFIG_KEYS.ALLOW_MULTIPLE_INSTANCES.toString());
-		if (!StringUtils.isEmpty(allowMultipleInstancesStr))
-		{
-			allowMultipleInstancesStr = allowMultipleInstancesStr.toLowerCase();		
-			allowMultipleInstances = (allowMultipleInstancesStr.equals("yes") || allowMultipleInstancesStr.equals("true"));
-		}
 
 		// check if batch size has been specified
 		String batchSizeStr = config.getProperty(CONFIG_KEYS.BATCH_SIZE.toString());
@@ -716,11 +706,6 @@ public class CopyToolConfig
 		}
 		
 		return checksum;
-	}
-	
-	public boolean allowMultipleInstances ()
-	{
-		return this.allowMultipleInstances;
 	}
 	
 	public HashMap<String, SourceDatabase> getSourceDatabases ()

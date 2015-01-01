@@ -14,7 +14,6 @@ public enum CONFIG_KEYS
 	MONETDB_MAIL_PORT("monetdb.mail.port"),
 	MONETDB_MAIL_USERNAME("monetdb.mail.username"),
 	MONETDB_MAIL_PASSWORD("monetdb.mail.password"),
-	ALLOW_MULTIPLE_INSTANCES("allow.multiple.instances", false),
 	SCHEDULER_ENABLED("scheduler.enabled", false),
 	SCHEDULER_INTERVAL("scheduler.interval", false),
 	BATCH_SIZE("batch.size", false);

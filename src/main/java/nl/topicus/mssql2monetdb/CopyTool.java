@@ -85,22 +85,6 @@ public class CopyTool
 		// load database drivers
 		loadDatabaseDrivers();
 		
-		// check if another instance of this job is already running
-		if (isInstanceRunning() && !config.allowMultipleInstances())
-		{
-			LOG.info("Another instance of this job is already running at the moment and multiple instances have not been enabled");
-			LOG.info("Finished!");
-			return;
-		}
-		
-		// mark as running
-		try {
-			markAsRunning();
-		} catch (IOException e) {
-			LOG.error("Unable to mark job as running", e);
-			EmailUtil.sendMail("Unable to start Copy job with the following error: "+ e.getStackTrace(), "Unable to copy data from table in monetdb", config.getDatabaseProperties());
-		}
-		
 		// how should we run? with scheduler (i.e. infinite) or one-time
 		if (config.isSchedulerEnabled()) 
 		{
@@ -144,8 +128,6 @@ public class CopyTool
 			// do one-time copy
 			doCopy();
 		}
-
-		markAsFinished();
 	}
 	
 	private void doCopy () throws CopyToolException
@@ -228,44 +210,6 @@ public class CopyTool
 
 		CopyToolConnectionManager.getInstance().closeConnections();
 		LOG.info("Finished!");
-	}
-	
-	/**
-	 * Checks whether another instance of the same job is already running on the same server
-	 */
-	public boolean isInstanceRunning ()
-	{
-		File runFile = getRunFile();
-		return runFile.exists();
-	}
-	
-	/**
-	 * Marks the job as running
-	 * @throws IOException 
-	 */
-	public void markAsRunning () throws IOException
-	{
-		File runFile = getRunFile();
-		runFile.createNewFile();
-		LOG.info("Marked job as currently running");
-	}
-	
-	/**
-	 * Mark the job as finished (no longer running)
-	 */
-	public void markAsFinished ()
-	{
-		File runFile = getRunFile();
-		if (runFile.exists())
-		{
-			runFile.delete();
-			LOG.info("Marked job as finished");
-		}
-	}
-	
-	public File getRunFile ()
-	{
-		return new File(getUserDir().getAbsolutePath() + "/." + config.getJobId() + "-running");
 	}
 	
 	public File getUserDir ()
