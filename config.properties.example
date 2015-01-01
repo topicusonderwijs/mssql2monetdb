@@ -46,6 +46,9 @@ monetdb.mail.port=8888
 monetdb.mail.username=
 monetdb.mail.password=
 
+# specifies a custom temp directory instead of the default system temp directory
+# temp.directory = /home/me/temp
+
 # indicates how many records should be insert at a time into MonetDB
 # only used when using INSERT method to insert new data. 
 batch.size = 10000

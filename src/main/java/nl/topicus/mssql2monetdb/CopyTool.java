@@ -195,8 +195,6 @@ public class CopyTool
 						}
 					}
 				}
-				
-				CopyToolConnectionManager.getInstance().closeConnections();
 			}
 					
 			// write out info for trigger
@@ -205,6 +203,8 @@ public class CopyTool
 				writeTriggerInfo(lastRunValue, lastRunColType);
 			}
 		}
+		
+		CopyToolConnectionManager.getInstance().closeConnections();
 	
 		LOG.info("Finished!");
 	}
@@ -596,7 +596,7 @@ public class CopyTool
 	{
 		LOG.info("Using COPY INTO VIA TEMP FILE to copy data to table " + monetDBTable.getToTableSql() + "...");
 	
-		File temp = File.createTempFile("table_" + monetDBTable.getName(), ".csv");		
+		File temp = new File(config.getTempDirectory(), "table_" + monetDBTable.getName() + ".csv");		
 		LOG.info("Writing data to temp file: " + temp.getAbsolutePath());
 		
 		BufferedWriter bw = new BufferedWriter(new FileWriter(temp));

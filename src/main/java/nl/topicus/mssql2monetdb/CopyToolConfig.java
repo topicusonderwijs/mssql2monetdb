@@ -52,6 +52,8 @@ public class CopyToolConfig
 	
 	private File configFile;
 
+	private String tempDirectory;
+	
 	private HashMap<String, SourceDatabase> sourceDatabases = new HashMap<String, SourceDatabase>(); 
 	
 	private HashMap<String, CopyTable> tablesToCopy = new HashMap<String, CopyTable>();
@@ -152,6 +154,8 @@ public class CopyToolConfig
 		
 		findTriggerProperties(config);
 		
+		this.tempDirectory = findTempDirectory(config);
+		
 		// verify scheduling source
 		//checkSchedulingSource();
 	}
@@ -197,36 +201,6 @@ public class CopyToolConfig
 		
 		return config;
 	}
-	
-	/*
-	private void checkSchedulingSource ()
-	{
-		if (this.isSchedulingEnabled())
-		{
-			if (StringUtils.isEmpty(this.schedulerSource))
-			{
-				if (!this.sourceDatabases.containsKey(DEFAULT_SOURCE_ID))
-				{
-					LOG.warn("No source database has been specified for scheduling table/column and default source does not exist. "
-							+ "Scheduling disabled!");
-					this.schedulerTable = "";
-				}
-				else
-				{
-					this.schedulerSource = DEFAULT_SOURCE_ID;
-				}
-			}
-			else
-			{
-				if (!this.sourceDatabases.containsKey(this.schedulerSource))
-				{
-					LOG.warn("Invalid source database '" + this.schedulerSource + "' specified for scheduling. Disabled scheduling!");
-					this.schedulerTable = "";
-				}
-			}
-
-		}
-	}*/
 
 	private Properties getAndValidateDatabaseProperties(Properties config) throws ConfigException
 	{
@@ -268,6 +242,61 @@ public class CopyToolConfig
 		}
 
 		return config;
+	}
+	
+	private String findTempDirectory (Properties config)
+	{
+		String defaultTempDir = System.getProperty("java.io.tmpdir");
+		String tempDir = config.getProperty(CONFIG_KEYS.TEMP_DIR.toString());
+		
+		// no custom temp directory specified?
+		// then use standard temp directory
+		if (StringUtils.isEmpty(tempDir))
+			return defaultTempDir;
+		
+		// make sure directory does not end with slash
+		while(tempDir.endsWith("/"))
+		{
+			tempDir = tempDir.substring(0, tempDir.length()-1);
+		}
+		
+		
+		File dir = new File(tempDir);
+		
+		if (dir.exists() && dir.isFile())
+		{
+			LOG.error("Unable to use '" + tempDir + "' as temporary directory. Already exists as file. Using standard temp directory.");
+			return defaultTempDir;
+		}
+		
+		if (!dir.exists())
+		{
+			if (!dir.mkdir())
+			{
+				LOG.error("Unable to create temp directory '" + tempDir + "'. Using standard temp directory.");
+				return defaultTempDir;
+			}
+		}
+		
+		// check if we can write to temp directory
+		File sample = new File(tempDir, "test.txt");
+		
+		try {
+			if (!sample.createNewFile())
+			{
+				LOG.error("Unable to write to temp directory '" + tempDir + "'. Using standard temp directory.");
+				return defaultTempDir;
+			}
+			
+			sample.delete();
+		} catch (IOException e) {
+			LOG.error("Unable to write to temp directory '" + tempDir + "'. Using standard temp directory.");
+			return defaultTempDir;
+		}
+		
+		// all checks ok, so use custom temp directory
+		return tempDir;
+		
 	}
 	
 	private void findTriggerProperties (Properties config)
@@ -785,16 +814,24 @@ public class CopyToolConfig
 		return triggerEnabled;
 	}
 	
-	public String getTriggerSource() {
+	public String getTriggerSource() 
+	{
 		return triggerSource;
 	}
 
-	public String getTriggerTable() {
+	public String getTriggerTable() 
+	{
 		return triggerTable;
 	}
 
-	public String getTriggerColumn() {
+	public String getTriggerColumn() 
+	{
 		return triggerColumn;
+	}
+	
+	public String getTempDirectory ()
+	{
+		return tempDirectory;
 	}
 
 }
