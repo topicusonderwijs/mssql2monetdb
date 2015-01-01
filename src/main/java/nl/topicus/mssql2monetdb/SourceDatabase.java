@@ -64,10 +64,13 @@ public class SourceDatabase {
 		
 		try {
 			if (!this.conn.isClosed())
+			{
 				this.conn.close();
+				LOG.info("Closed connection to MS SQL Server '" + this.id + "'");
+			}
 			
 		} catch (SQLException e) {
-			// ignore silently
+			LOG.warn("Got exception trying to close connection to MS SQL Server '" + this.id + "'", e);
 		}			
 	}
 	

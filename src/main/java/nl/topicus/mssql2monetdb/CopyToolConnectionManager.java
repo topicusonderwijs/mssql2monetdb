@@ -24,6 +24,8 @@ public class CopyToolConnectionManager
 	private MapiSocket monetDbServer;
 	
 	private HashMap<String, SourceDatabase> sourceDatabases;
+	
+	private CopyToolConfig config;
 
 	private CopyToolConnectionManager()
 	{
@@ -42,11 +44,15 @@ public class CopyToolConnectionManager
 
 		return instance;
 	}
-
-	public void openConnections(CopyToolConfig config) throws CopyToolException
-	{		
+	
+	public void setConfig(CopyToolConfig config)
+	{
+		this.config = config;
 		this.sourceDatabases = config.getSourceDatabases();
-		
+	}
+
+	public void openConnections() throws CopyToolException
+	{		
 		Properties databaseProperties = config.getDatabaseProperties();		
 		try
 		{

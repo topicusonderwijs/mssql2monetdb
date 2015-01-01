@@ -84,6 +84,7 @@ public class CopyTool
 		
 		// load database drivers
 		loadDatabaseDrivers();
+		CopyToolConnectionManager.getInstance().setConfig(config);
 		
 		// how should we run? with scheduler (i.e. infinite) or one-time
 		if (config.isSchedulerEnabled()) 
@@ -135,19 +136,17 @@ public class CopyTool
 		HashMap<String, CopyTable> tablesToCopy = config.getTablesToCopy();
 		if (tablesToCopy.size() > 0)
 		{
-			CopyToolConnectionManager.getInstance().openConnections(config);
-			
-			// check if scheduling is enabled and if so, if there is any new data
+			// check if trigger is enabled and if so, if there is any new data
 			boolean anyErrors = false;
 			
-			/*
-			if (config.isSchedulingEnabled() && !checkForNewData())
+			if (config.isTriggerEnabled() && !checkForNewData())
 			{
-				LOG.info("No indication of new data from scheduling source '" + config.getSchedulerTable() + "." + config.getSchedulerColumn() + "'");
+				LOG.info("No indication of new data from trigger source '" + config.getTriggerTable() + "." + config.getTriggerColumn() + "'");
 			}
 			else
 			{
-			*/
+				CopyToolConnectionManager.getInstance().openConnections();
+				
 				// check if all MSSQL tables have data and stop the copy if one doesn't
 				if (MssqlUtil.allMSSQLTablesHaveData(tablesToCopy))
 				{
@@ -196,19 +195,17 @@ public class CopyTool
 						}
 					}
 				}
-			/*
+				
+				CopyToolConnectionManager.getInstance().closeConnections();
 			}
-			
-			
-			// write out info for schedule
-			if (config.isSchedulingEnabled() && !anyErrors)
+					
+			// write out info for trigger
+			if (config.isTriggerEnabled() && !anyErrors)
 			{
-				writeScheduleInfo(lastRunValue, lastRunColType);
+				writeTriggerInfo(lastRunValue, lastRunColType);
 			}
-			*/
 		}
-
-		CopyToolConnectionManager.getInstance().closeConnections();
+	
 		LOG.info("Finished!");
 	}
 	
@@ -232,11 +229,10 @@ public class CopyTool
 	 * it should insert a new row in the scheduler source to indicate to this
 	 * tool that there is a new data to be loaded.
 	 */
-	/*
 	private boolean checkForNewData ()
 	{		
-		LOG.info("Checking scheduling source '" + config.getSchedulerSource() + "." + 
-				config.getSchedulerTable() + "." + config.getSchedulerColumn() + "'");
+		LOG.info("Checking trigger source '" + config.getTriggerSource() + "." + 
+				config.getTriggerTable() + "." + config.getTriggerColumn() + "'");
 		
 		// get value from source
 		Object newValue = null;
@@ -244,12 +240,12 @@ public class CopyTool
 		try 
 		{
 			Statement selectStmt =
-					CopyToolConnectionManager.getInstance().getMssqlConnection(config.getSchedulerSource()).createStatement();
+					CopyToolConnectionManager.getInstance().getMssqlConnection(config.getTriggerSource()).createStatement();
 			
 			ResultSet res = selectStmt.executeQuery(
-				"SELECT TOP 1 [" + config.getSchedulerColumn() + "] "
-				+ "FROM [" + config.getSchedulerTable() + "] "
-				+ "ORDER BY [" + config.getSchedulerColumn() + "] DESC"
+				"SELECT TOP 1 [" + config.getTriggerColumn() + "] "
+				+ "FROM [" + config.getTriggerTable() + "] "
+				+ "ORDER BY [" + config.getTriggerColumn() + "] DESC"
 			);
 			
 			// no rows in table? then we cannot determine any indication
@@ -380,12 +376,11 @@ public class CopyTool
 	    // no new data
 		return false;
 	}
-	*/
 	
 	/**
-	 * Writes the lastrun info for the scheduling to disk
+	 * Writes the lastrun info for the trigger to disk
 	 */
-	private boolean writeScheduleInfo (Object newValue, int colType)
+	private boolean writeTriggerInfo (Object newValue, int colType)
 	{
 		File scheduleFile = getLastRunFile();
 		

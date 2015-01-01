@@ -1,23 +1,3 @@
-# indicates how many records should be insert at a time into MonetDB
-# only used when using INSERT method to insert new data. 
-batch.size = 10000
-
-# Scheduling options
-# Enabling the scheduler will run the tool indefinitely and run the copy job
-# every X minutes/hours/days. Very useful in combination with the trigger options
-#
-# scheduler.enabled = true
-# scheduler.interval = every 5 minutes
-
-# Trigger options
-# With this the tool will check this table/column in SQL server and determine
-# if there have been any changes since the last run. The copy job will only be executed
-# if there is new data in the trigger column.
-#
-# trigger.source = db1
-# trigger.table = updated
-# trigger.column = last_updatetime
-
 # target MonetDB Database:
 monetdb.user = monetdb
 monetdb.password = ENV:MONETDB_PASSWORD:monetdb
@@ -41,15 +21,6 @@ table.example.schema = sys
 table.example.create = true
 table.example.truncate = true
 
-# Mail settings
-monetdb.mail.sendmail=true
-monetdb.mail.to=my.name@something.com
-monetdb.mail.from=from@someone.com
-monetdb.mail.server=1.1.1.1
-monetdb.mail.port=8888
-monetdb.mail.username=
-monetdb.mail.password=
-
 # use tmp_tables to copy the data to so we can recreate the 
 # to-table for faster data transfer to the end table which 
 # reduces down-time
@@ -65,3 +36,33 @@ table.example.tempTablePrefix = tmp_
 table.example.useFastViewSwitching = false
 table.example.currentTablePrefix = current_
 table.example.backupTablePrefix = backup_
+
+# Mail settings
+monetdb.mail.sendmail=true
+monetdb.mail.to=my.name@something.com
+monetdb.mail.from=from@someone.com
+monetdb.mail.server=1.1.1.1
+monetdb.mail.port=8888
+monetdb.mail.username=
+monetdb.mail.password=
+
+# indicates how many records should be insert at a time into MonetDB
+# only used when using INSERT method to insert new data. 
+batch.size = 10000
+
+# Scheduling options
+# Enabling the scheduler will run the tool indefinitely and run the copy job
+# every X minutes/hours/days. Very useful in combination with the trigger options
+#
+# scheduler.enabled = true
+# scheduler.interval = every 5 minutes
+
+# Trigger options
+# With this the tool will check this table/column in SQL server and determine
+# if there have been any changes since the last run. The copy job will only be executed
+# if there is new data in the trigger column.
+#
+# trigger.enabled = true
+# trigger.source = db1
+# trigger.table = updated
+# trigger.column = last_updatetime

@@ -42,6 +42,14 @@ public class CopyToolConfig
 	
 	private int schedulerInterval;
 	
+	private boolean triggerEnabled;
+	
+	private String triggerSource;
+	
+	private String triggerTable;
+	
+	private String triggerColumn;
+	
 	private File configFile;
 
 	private HashMap<String, SourceDatabase> sourceDatabases = new HashMap<String, SourceDatabase>(); 
@@ -70,6 +78,8 @@ public class CopyToolConfig
 	    while ((nread = fis.read(dataBytes)) != -1) {
 	      md.update(dataBytes, 0, nread);
 	    };
+	    
+	    fis.close();
 	 
 	    byte[] mdbytes = md.digest();
 	 
@@ -139,6 +149,8 @@ public class CopyToolConfig
 		this.tablesToCopy = findTablesToCopy(config);
 		
 		findSchedulerProperties(config);
+		
+		findTriggerProperties(config);
 		
 		// verify scheduling source
 		//checkSchedulingSource();
@@ -256,6 +268,61 @@ public class CopyToolConfig
 		}
 
 		return config;
+	}
+	
+	private void findTriggerProperties (Properties config)
+	{
+		triggerEnabled = getBooleanProperty(config, CONFIG_KEYS.TRIGGER_ENABLED.toString());
+		
+		if (!triggerEnabled)
+			return;
+		
+		String source = config.getProperty(CONFIG_KEYS.TRIGGER_SOURCE.toString());
+		String table = config.getProperty(CONFIG_KEYS.TRIGGER_TABLE.toString());
+		String column = config.getProperty(CONFIG_KEYS.TRIGGER_COLUMN.toString());
+		
+		if (StringUtils.isEmpty(source))
+		{
+			if (!this.sourceDatabases.containsKey(DEFAULT_SOURCE_ID))
+			{
+				LOG.error("No trigger source defined and default source database does not exist. Trigger disabled!");
+				triggerEnabled = false;
+				return;
+			}
+			else
+			{
+				source = DEFAULT_SOURCE_ID;
+			}
+		}
+		else
+		{
+			if (!this.sourceDatabases.containsKey(source))
+			{
+				LOG.error("Defined trigger source '" + source + "' does not exist. Trigger disabled!");
+				triggerEnabled = false;
+				return;
+			}
+		}
+		
+		if (StringUtils.isEmpty(table))
+		{
+			LOG.error("Trigger table has not been set or is empty in configuration. Trigger disabled!");
+			triggerEnabled = false;
+			return;
+		}
+		
+		if (StringUtils.isEmpty(column))
+		{
+			LOG.error("Trigger column has not been set or is empty in configuration. Trigger disabled!");
+			triggerEnabled = false;
+			return;
+		}
+		
+		triggerSource = source;
+		triggerTable = table;
+		triggerColumn = column;
+		
+		LOG.info("Trigger enabled, monitoring " + source +"." + table + "." + column + " for indication of new data");
 	}
 	
 	private void findSchedulerProperties (Properties config)
@@ -711,6 +778,23 @@ public class CopyToolConfig
 	public HashMap<String, SourceDatabase> getSourceDatabases ()
 	{
 		return this.sourceDatabases;
+	}
+
+	public boolean isTriggerEnabled ()
+	{
+		return triggerEnabled;
+	}
+	
+	public String getTriggerSource() {
+		return triggerSource;
+	}
+
+	public String getTriggerTable() {
+		return triggerTable;
+	}
+
+	public String getTriggerColumn() {
+		return triggerColumn;
 	}
 
 }

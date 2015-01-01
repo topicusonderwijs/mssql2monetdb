@@ -16,6 +16,10 @@ public enum CONFIG_KEYS
 	MONETDB_MAIL_PASSWORD("monetdb.mail.password"),
 	SCHEDULER_ENABLED("scheduler.enabled", false),
 	SCHEDULER_INTERVAL("scheduler.interval", false),
+	TRIGGER_ENABLED("trigger.enabled", false),
+	TRIGGER_SOURCE("trigger.source", false),
+	TRIGGER_TABLE("trigger.table", false),
+	TRIGGER_COLUMN("trigger.column", false),
 	BATCH_SIZE("batch.size", false);
 	
 	private final String key;
