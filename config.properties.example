@@ -1,28 +1,26 @@
 # indicates how many records should be insert at a time into MonetDB
+# only used when using INSERT method to insert new data. 
 batch.size = 10000
 
 # Scheduling options
+# Enabling the scheduler will run the tool indefinitely and run the copy job
+# every X minutes/hours/days. Very useful in combination with the trigger options
 #
 # scheduler.enabled = true
 # scheduler.interval = every 5 minutes
 
 # Trigger options
+# With this the tool will check this table/column in SQL server and determine
+# if there have been any changes since the last run. The copy job will only be executed
+# if there is new data in the trigger column.
 #
 # trigger.source = db1
 # trigger.table = updated
 # trigger.column = last_updatetime
 
-# Scheduling options
-# With this the tool will check this table/column in SQL server and determine
-# if there have been any changes since the last run
-#
-# scheduler.source = db1
-# scheduler.table = updated
-# scheduler.column = last_updatetime
-
 # target MonetDB Database:
 monetdb.user = monetdb
-monetdb.password = ENV:MONETDB_PASSWORD
+monetdb.password = ENV:MONETDB_PASSWORD:monetdb
 monetdb.server = localhost
 monetdb.database = my_monetdb
 

@@ -156,16 +156,29 @@ public class CopyToolConfig
 			if (!value.toLowerCase().startsWith("env:"))
 				continue;
 			
-			// retrieve name of environment variable
-			String envVar = value.substring(4);
+			String[] split = value.split(":");
+			
+			// retrieve name of environment variable and (optional) default value
+			String envVar = split[1];
+			String defaultValue = (split.length >= 3) ? split[2] : "";
 			
 			// get value of environment variable
 			String envValue = System.getenv(envVar);
 			
 			if (StringUtils.isEmpty(envValue))
 			{
-				LOG.warn("Configuration property '" + key.toString() + "' set to empty. Environment variable '" + envVar + "' is empty or not set!");
-				envValue = "";
+				if (StringUtils.isEmpty(defaultValue))
+				{
+					LOG.warn("Configuration property '" + key.toString() + "' set to empty. "
+							+ "Environment variable '" + envVar + "' is empty or not set!");
+				}
+				else
+				{
+					LOG.info("Configuration property '" + key.toString() + "' set to default value '" + defaultValue + "'."
+							+ "Environment variable '" + envVar + "' is empty or not set.");
+				}
+				
+				envValue = defaultValue;
 			}
 			
 			// set new value of config property
