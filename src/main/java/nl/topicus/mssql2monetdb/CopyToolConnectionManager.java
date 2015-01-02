@@ -50,42 +50,40 @@ public class CopyToolConnectionManager
 		this.config = config;
 		this.sourceDatabases = config.getSourceDatabases();
 	}
-
-	public void openConnections() throws CopyToolException
-	{		
+	
+	public void openMonetDbConnection () throws SQLException
+	{
 		Properties databaseProperties = config.getDatabaseProperties();		
-		try
+	
+		if (monetDbConn == null || monetDbConn.isClosed())
 		{
-			if (monetDbConn == null || monetDbConn.isClosed())
+			Properties connProps = new Properties();
+			String user = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_USER.toString());
+			String password =
+				databaseProperties.getProperty(CONFIG_KEYS.MONETDB_PASSWORD.toString());
+
+			if (StringUtils.isEmpty(user) == false && StringUtils.isEmpty(password) == false)
 			{
-				Properties connProps = new Properties();
-				String user = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_USER.toString());
-				String password =
-					databaseProperties.getProperty(CONFIG_KEYS.MONETDB_PASSWORD.toString());
-
-				if (StringUtils.isEmpty(user) == false && StringUtils.isEmpty(password) == false)
-				{
-					connProps.setProperty("user", user);
-					connProps.setProperty("password", password);
-				}
-
-				String url =
-					"jdbc:monetdb://"
-						+ databaseProperties.getProperty(CONFIG_KEYS.MONETDB_SERVER.toString())
-						+ "/"
-						+ databaseProperties.getProperty(CONFIG_KEYS.MONETDB_DATABASE.toString());
-				LOG.info("Using connection URL for MonetDB Server: " + url);
-
-				monetDbConn = DriverManager.getConnection(url, connProps);
-				LOG.info("Opened connection to MonetDB Server");
+				connProps.setProperty("user", user);
+				connProps.setProperty("password", password);
 			}
-		}
-		catch (SQLException e)
-		{
-			closeConnections();
-			throw new CopyToolException("Unable to open connection to MonetDB server", e);
-		}
 
+			String url =
+				"jdbc:monetdb://"
+					+ databaseProperties.getProperty(CONFIG_KEYS.MONETDB_SERVER.toString())
+					+ "/"
+					+ databaseProperties.getProperty(CONFIG_KEYS.MONETDB_DATABASE.toString());
+			LOG.info("Using connection URL for MonetDB: " + url);
+
+			monetDbConn = DriverManager.getConnection(url, connProps);
+			LOG.info("Opened connection to MonetDB");
+		}
+	}
+	
+	public void openMonetDbServerConnection ()
+	{
+		Properties databaseProperties = config.getDatabaseProperties();		
+		
 		monetDbServer = new MapiSocket();
 
 		monetDbServer.setDatabase(databaseProperties.getProperty(CONFIG_KEYS.MONETDB_DATABASE
@@ -125,7 +123,6 @@ public class CopyToolConnectionManager
 			monetDbServer.close();
 			monetDbServer = null;
 		}
-
 	}
 
 	public void closeConnections()
@@ -175,13 +172,20 @@ public class CopyToolConnectionManager
 		}
 	}
 
-	public Connection getMonetDbConnection()
+	public Connection getMonetDbConnection() throws SQLException
 	{
+		// make sure MonetDB connection is opened
+		if (monetDbConn == null || monetDbConn.isClosed())
+			openMonetDbConnection();
+		
 		return monetDbConn;
 	}
 
 	public MapiSocket getMonetDbServer()
 	{
+		if (monetDbServer == null)
+			this.openMonetDbServerConnection();
+		
 		return monetDbServer;
 	}
 
