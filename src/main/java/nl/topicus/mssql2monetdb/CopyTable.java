@@ -62,6 +62,18 @@ public class CopyTable
 	
 	// this will do COPY INTO with LOCKED MODE
 	private boolean useLockedMode = true;
+	
+	private String loadDate;
+	
+	public void setLoadDate(String loadDateStr)
+	{
+		this.loadDate = loadDateStr;
+	}
+	
+	public String getLoadDate()
+	{
+		return this.loadDate;
+	}
 
 	public void setCopyMethod(int copyMethod)
 	{

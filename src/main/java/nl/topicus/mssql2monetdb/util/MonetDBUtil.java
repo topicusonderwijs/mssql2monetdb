@@ -386,6 +386,42 @@ public class MonetDBUtil
 		LOG.info("Table verified");
 	}
 
+	public static void dropMonetDBTableOrView (MonetDBTable monetDBTable) throws SQLException
+	{
+		String schema = monetDBTable.getCopyTable().getSchema();
+		String name = monetDBTable.getName();
+		
+		String fullName = schema + "." + name;
+		if (monetDBTableExists(monetDBTable))
+		{
+			LOG.info("Dropping table or view '" + fullName + "' on MonetDB server...");
+			
+			try {
+				Statement stmt =
+					CopyToolConnectionManager.getInstance().getMonetDbConnection()
+						.createStatement();
+				StringBuilder builder = new StringBuilder();
+				if (tableOrViewExists(schema, name))
+				{
+					// if its a table, drop the table
+					if (isTable(schema, name))
+						builder.append("DROP TABLE " + fullName + ";");
+					else
+						builder.append("DROP VIEW " + fullName + ";");
+				}
+				
+				stmt.execute(builder.toString());
+			}
+			catch (SQLException e)
+			{
+				LOG.error("Error dropping '" + fullName + "'", e);
+				throw new RuntimeException(e);
+			}
+			
+			LOG.info("Table or view '" + fullName + "' dropped");
+		}
+	}
+	
 	/**
 	 * Drops a view, if it exists, and creates the view for which queries (select * from)
 	 * a {@link MonetDBTable}.

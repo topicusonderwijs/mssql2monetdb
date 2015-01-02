@@ -21,7 +21,10 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.text.DateFormat;
 import java.text.DecimalFormat;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.HashMap;
 
 import nl.cwi.monetdb.mcl.io.BufferedMCLReader;
@@ -195,14 +198,19 @@ public class CopyTool
 		
 		LOG.info("STARTING PHASE 2: loading data into target MonetDB database");
 		
+		// get a SQL-friendly representation of the current date/time of the load
+		// used for the fast view switching tables
+		DateFormat dateFormat = new SimpleDateFormat("yyyy_MM_dd_HH_mm_ss");
+		Calendar cal = Calendar.getInstance();
+		String loadDateStr = dateFormat.format(cal.getTime());
+		
 		// phase 2: load data from disk into MonetDB
 		try {
 			for (CopyTable table : tablesToCopy.values())
 			{
-				// backup table if configured and switch view to the backup table
-				if (table.isUseFastViewSwitching())
-					backupTableAndSwitchView(table.getCurrentTable());
-				
+				// pass load date to table
+				table.setLoadDate(loadDateStr);
+								
 				// load new data into MonetDB
 				loadData(table);
 			}
@@ -229,12 +237,15 @@ public class CopyTool
 			{
 				copyTempTableToCurrentTable(copyTable);
 			}
+			
 			try
 			{
 				// set view to current table because it contains the new data now
 				if (copyTable.isUseFastViewSwitching())
+				{
 					MonetDBUtil.dropAndRecreateViewForTable(copyTable.getSchema(),
 						copyTable.getToName(), copyTable.getCurrentTable());
+				}
 			}
 			catch (SQLException e)
 			{
@@ -246,15 +257,24 @@ public class CopyTool
 		
 		LOG.info("PHASE 3 FINISHED: all views have been switched");
 		
-		LOG.info("STARTING PHASE 4: cleanup of data from disk");
+		LOG.info("STARTING PHASE 4: cleanup of data from disk and database");
 		
-		// phase 4: remove temp data from disk
+		// phase 4: remove temp data from disk and target database
 		for (CopyTable copyTable : tablesToCopy.values())
 		{
+			// remove temp data from disk
 			removeTempData(copyTable);
+			
+			// remove old versions of view-based tables
+			// that are no longer needed
+			try {
+				dropOldTables(copyTable);
+			} catch (SQLException e) {
+				LOG.warn("Got SQLException when trying to drop older versions of table '" + copyTable.getToName() + "': " + e.getMessage(), e);
+			}
 		}
 		
-		LOG.info("PHASE 4 FINISHED: all data removed from disk");
+		LOG.info("PHASE 4 FINISHED: all data removed from disk and database");
 
 		// write out info for trigger
 		if (config.isTriggerEnabled() && !anyErrors)
@@ -464,37 +484,59 @@ public class CopyTool
 		}
 		
 	}
-
+	
 	/**
-	 * Backup a table by copying the data into a backup table named backup_currentTable by
-	 * currentTable and metaData of the MSSQL table that is copied.
-	 * 
-	 * @throws SQLException
+	 * Drops older versions of tables that are no longer used by the view.
+	 * @throws SQLException 
 	 */
-	private void backupTableAndSwitchView(MonetDBTable currentTable) throws SQLException
+	private void dropOldTables(CopyTable table) throws SQLException
 	{
-		LOG.info("Backupping " + currentTable.getToTableSql());
+		LOG.info("Dropping older versions of table '" + table.getToName() + "'...");
 		
-		// create a MonetDBTable object for the backup table
-		MonetDBTable backupTable = new MonetDBTable(currentTable.getCopyTable());
+		Statement q =
+			CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
 		
-		// use the copyTable.toName
-		backupTable.setName(currentTable.getCopyTable().getToName());
-		backupTable.setBackupTable(true);
+		ResultSet result =
+			q.executeQuery("SELECT name FROM sys.tables WHERE name LIKE '" + table.getToName()
+				+ "%' AND name <> '" + table.getToName() + "' "
+				+ "AND schema_id = (SELECT id from sys.schemas WHERE name = '" + table.getSchema()
+				+ "') AND query IS NULL ORDER BY name DESC");
 		
-		// drop and recreate backup table regardless if it exists
-		LOG.info("Drop backup table '" + backupTable.getToTableSql() + "' if exists");
-		MonetDBUtil.dropMonetDBTable(backupTable);
+		int i = 0;
+		int dropCount = 0;
+		Statement stmtDrop =
+			CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
+		while(result.next())
+		{
+			i++;
+			
+			// if table is a fast view-switching table then
+			// 		skip first result -> is current table and referenced by view
+			// 		skip second result -> as backup (TODO: perhaps make this configurable?)
+			if (table.isUseFastViewSwitching())
+				if (i == 1 || i == 2)
+					continue;
+			
+			// build DROP query
+			StringBuilder query = new StringBuilder("DROP TABLE ");
+			
+			if (!StringUtils.isEmpty(table.getSchema()))
+				query.append(MonetDBUtil.quoteMonetDbIdentifier(table.getSchema())).append(".");
+			
+			query.append(MonetDBUtil.quoteMonetDbIdentifier(result.getString("name"))).append(";");
+			
+			// execute DROP query
+			stmtDrop.executeUpdate(query.toString());			
+			dropCount++;
+		}
 		
-		// copy from currentTable to backup table
-		MonetDBUtil.copyMonetDBTableToNewMonetDBTable(currentTable, backupTable);
+		if (i == 0)
+			LOG.info("Table '" + table.getToName() + "' has no older versions");
+		else
+			LOG.info("Dropped " + dropCount + " older versions of table '" + table.getToName() + "'");
 		
-		LOG.info("Switch view to '" + backupTable.getToTableSql() + "'");
-		
-		// drop and recreate the view for the table and point to the just created backup
-		// table so we can fill the current table with new data
-		MonetDBUtil.dropAndRecreateViewForTable(currentTable.getCopyTable().getSchema(),
-			currentTable.getCopyTable().getToName(), backupTable);
+		result.close();
+		q.close();
 	}
 	
 	/**
@@ -950,10 +992,13 @@ public class CopyTool
 
 		// need to drop? don't drop when useFastViewSwitching is enabled because then we
 		// have a view
-		if (tableExists && monetDBTable.getCopyTable().drop())
+		if (!monetDBTable.getCopyTable().isUseFastViewSwitching())
 		{
-			MonetDBUtil.dropMonetDBTable(monetDBTable);
-			tableExists = false;
+			if (tableExists && monetDBTable.getCopyTable().drop())
+			{
+				MonetDBUtil.dropMonetDBTableOrView(monetDBTable);
+				tableExists = false;
+			}
 		}
 
 		if (tableExists)
