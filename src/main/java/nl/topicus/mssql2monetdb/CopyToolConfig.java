@@ -407,7 +407,7 @@ public class CopyToolConfig
 					}
 					
 				} catch (NumberFormatException e) {
-					// ok, so not a number, we give up!
+					LOG.warn("Unable to parse scheduler interval '" + split[0] + "'");
 				}
 			}
 		}
@@ -502,18 +502,24 @@ public class CopyToolConfig
 		}
 		
 		// verify each source database has a database and server specified
-		for(String id : sourceDatabases.keySet())
+		Iterator<Entry<String, SourceDatabase>> iter = sourceDatabases.entrySet().iterator();
+		while(iter.hasNext())
 		{
-			SourceDatabase db = sourceDatabases.get(id);
+			Entry<String, SourceDatabase> entry = iter.next();
+			
+			String id = entry.getKey();
+			SourceDatabase db = entry.getValue();
 			
 			if (StringUtils.isEmpty(db.getDatabase()))
 			{
-				LOG.warn("MSSQL database with id '" + id + "' is missing the database name in the config!");
+				LOG.error("MSSQL database with id '" + id + "' is missing the database name in the config!");
+				iter.remove();
 			}
 			
 			if (StringUtils.isEmpty(db.getServer()))
 			{
-				LOG.warn("MSSQL database with id '" + id + "' is missing the server in the config!");
+				LOG.error("MSSQL database with id '" + id + "' is missing the server in the config!");
+				iter.remove();
 			}				
 		}
 		

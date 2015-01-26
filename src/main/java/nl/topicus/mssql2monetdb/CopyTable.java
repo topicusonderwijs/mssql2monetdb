@@ -61,7 +61,7 @@ public class CopyTable
 	private boolean useFastViewSwitching = false;
 	
 	// this will do COPY INTO with LOCKED MODE
-	private boolean useLockedMode = true;
+	private boolean useLockedMode = false;
 	
 	private String loadDate;
 	

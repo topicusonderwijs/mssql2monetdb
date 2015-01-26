@@ -498,7 +498,7 @@ public class CopyTool
 		
 		ResultSet result =
 			q.executeQuery("SELECT name FROM sys.tables WHERE name LIKE '" + table.getToName()
-				+ "%' AND name <> '" + table.getToName() + "' "
+				+ "_20%_%' AND name <> '" + table.getToName() + "' "
 				+ "AND schema_id = (SELECT id from sys.schemas WHERE name = '" + table.getSchema()
 				+ "') AND query IS NULL ORDER BY name DESC");
 		
@@ -530,7 +530,7 @@ public class CopyTool
 			dropCount++;
 		}
 		
-		if (i == 0)
+		if (i == 0 || (table.isUseFastViewSwitching() && i == 2))
 			LOG.info("Table '" + table.getToName() + "' has no older versions");
 		else
 			LOG.info("Dropped " + dropCount + " older versions of table '" + table.getToName() + "'");
@@ -742,7 +742,7 @@ public class CopyTool
 			try {
 				isLoaded = loadDataFromFile(copyToTable, dataFile, metaData, insertCount, table.isUseLockedMode());
 			} catch (SQLException e) {
-				LOG.error("Failed to load data directly from file: " + e.getMessage());
+				LOG.warn("Failed to load data directly from file: " + e.getMessage());
 			}
 					
 			// not loaded? then try loading via COPY INTO FROM STDIN
@@ -751,7 +751,7 @@ public class CopyTool
 				try {
 					isLoaded = loadDataFromStdin (copyToTable, dataFile, metaData, insertCount, table.isUseLockedMode());
 				} catch (Exception e) {
-					LOG.error("Failed to load data directly via STDIN: " + e.getMessage());
+					LOG.warn("Failed to load data directly via STDIN: " + e.getMessage());
 				}
 			}
 		}

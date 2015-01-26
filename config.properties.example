@@ -34,8 +34,6 @@ table.example.tempTablePrefix = tmp_
 # resulting in almost no down-time of your database table
 # prefixes can be defined if you want custom naming
 table.example.useFastViewSwitching = false
-table.example.currentTablePrefix = current_
-table.example.backupTablePrefix = backup_
 
 # Mail settings
 monetdb.mail.sendmail=true

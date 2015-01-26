@@ -52,7 +52,7 @@ public class SerializableResultSetMetaData implements ResultSetMetaData, Seriali
 	
 	public SerializableResultSetMetaData ()
 	{
-		// empty
+		// empty default constructor
 	}
 
 	private SerializableColumnMetaData getColumn (int column) throws SQLException
