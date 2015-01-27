@@ -530,7 +530,7 @@ public class CopyTool
 			dropCount++;
 		}
 		
-		if (i == 0 || (table.isUseFastViewSwitching() && i == 2))
+		if (i == 0 || (table.isUseFastViewSwitching() && i <= 2))
 			LOG.info("Table '" + table.getToName() + "' has no older versions");
 		else
 			LOG.info("Dropped " + dropCount + " older versions of table '" + table.getToName() + "'");
