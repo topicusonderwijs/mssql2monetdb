@@ -3,13 +3,17 @@ package nl.topicus.mssql2monetdb;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
-import java.sql.Clob;
+import java.io.Writer;
 import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -17,7 +21,10 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.text.DateFormat;
 import java.text.DecimalFormat;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.HashMap;
 
 import nl.cwi.monetdb.mcl.io.BufferedMCLReader;
@@ -25,13 +32,18 @@ import nl.cwi.monetdb.mcl.io.BufferedMCLWriter;
 import nl.topicus.mssql2monetdb.util.EmailUtil;
 import nl.topicus.mssql2monetdb.util.MonetDBUtil;
 import nl.topicus.mssql2monetdb.util.MssqlUtil;
+import nl.topicus.mssql2monetdb.util.SerializableResultSetMetaData;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
 
+import au.com.bytecode.opencsv.CSVReader;
+
 public class CopyTool
 {
 	private static final Logger LOG = Logger.getLogger(CopyTool.class);
+	
+	private static final int SLEEP_INCREMENT = 1 * 60 * 1000;
 
 	private CopyToolConfig config;
 
@@ -49,153 +61,230 @@ public class CopyTool
 		//the log files is not yet inistialized
 		System.out.println("Started MSSQL2MonetDB copy tool");
 
+		CopyToolConfig config = null;
+		
+		// load config
+		try {
+			config = new CopyToolConfig(args);
+		} catch (ConfigException e) {
+			System.exit(1);
+		}
+		
+		// setup tool
+		CopyTool tool = new CopyTool();
+		
 		// run tool
-		(new CopyTool(new CopyToolConfig(args))).run();
-	}
-	
-	
-
-	public CopyTool(CopyToolConfig config)
-	{
-		this.config = config;
-		if (config == null)
-		{
-			LOG.error("CopyToolConfig cannot be null");
+		try {
+			tool.run(config);
+		} catch (CopyToolException e) {
+			LOG.fatal(e.getMessage(), e);
 			System.exit(1);
 		}
 	}
-
-	public void run()
+	
+	
+	
+	public void run(CopyToolConfig config) throws CopyToolException
 	{
-		// check if another instance of this job is already running
-		if (isInstanceRunning() && !config.allowMultipleInstances())
+		if (config == null)
 		{
-			LOG.info("Another instance of this job is already running at the moment and multiple instances have not been enabled");
-			LOG.info("Finished!");
+			throw new CopyToolException("CopyToolConfig cannot be null");
+		}
+		this.config = config;
+		
+		// load database drivers
+		loadDatabaseDrivers();
+		CopyToolConnectionManager.getInstance().setConfig(config);
+		
+		// how should we run? with scheduler (i.e. infinite) or one-time
+		if (config.isSchedulerEnabled()) 
+		{
+			int interval = config.getSchedulerInterval() * 1000;
+			int timeLeft = interval;
+			
+			while(true)
+			{
+				// do copy
+				try {
+					doCopy();
+				} catch (Exception e) {
+					// we catch every exception because we don't want to fail
+					// out of the scheduler
+					LOG.error("Caught exception: " + e.getMessage(), e);
+				}
+
+				LOG.info("Scheduling enabled, sleeping for " + (interval/1000) + " seconds until next run");
+				timeLeft = interval;
+				
+				// sleep in increments of 5 minutes
+				while(timeLeft > 0)
+				{
+					// do sleep
+					try {
+						Thread.sleep((timeLeft > SLEEP_INCREMENT) ? SLEEP_INCREMENT : timeLeft);
+					} catch (InterruptedException e) {
+						LOG.warn("Scheduled waiting time got interrupted!");
+					}
+					
+					timeLeft = timeLeft - SLEEP_INCREMENT;
+					if (timeLeft > 0)
+						LOG.info("Still sleeping " + (timeLeft/1000) + " seconds until next run");
+				}
+				
+				LOG.info("Starting next run!");
+			}
+		}
+		else
+		{
+			// do one-time copy
+			doCopy();
+		}
+	}
+	
+	private void doCopy () throws CopyToolException
+	{
+		HashMap<String, CopyTable> tablesToCopy = config.getTablesToCopy();
+		
+		// no tables to copy?
+		if (tablesToCopy.size() == 0)
+		{
+			LOG.warn("No tables to copy");
+			CopyToolConnectionManager.getInstance().closeConnections();
 			return;
 		}
 		
-		// mark as running
-		try {
-			markAsRunning();
-		} catch (IOException e) {
-			LOG.error("Unable to mark job as running", e);
-			EmailUtil.sendMail("Unable to start Copy job with the following error: "+ e.getStackTrace(), "Unable to copy data from table in monetdb", config.getDatabaseProperties());
+		// check if trigger is enabled and if so, if there is any new data
+		boolean anyErrors = false;
+		
+		if (config.isTriggerEnabled() && !checkForNewData())
+		{
+			LOG.info("No indication of new data from trigger source '" + config.getTriggerTable() + "." + config.getTriggerColumn() + "'");
+			CopyToolConnectionManager.getInstance().closeConnections();
+			return;
 		}
 		
-		HashMap<String, CopyTable> tablesToCopy = config.getTablesToCopy();
-		if (tablesToCopy.size() > 0)
+		// verify all MSSQL tables have data
+		if (!MssqlUtil.allMSSQLTablesHaveData(tablesToCopy))
 		{
-			CopyToolConnectionManager.getInstance().openConnections(config.getDatabaseProperties());
-			
-			// check if scheduling is enabled and if so, if there is any new data
-			boolean anyErrors = false;
-			if (config.isSchedulingEnabled() && !checkForNewData())
+			LOG.warn("Not all tables have data");
+			CopyToolConnectionManager.getInstance().closeConnections();
+			return;
+		}
+		
+		// verify MonetDB database is working by opening connection
+		try {
+			CopyToolConnectionManager.getInstance().openMonetDbConnection();
+		} catch (SQLException e) {
+			LOG.error("Unable to open connection to target MonetDB database: " + e.getMessage(), e);
+			CopyToolConnectionManager.getInstance().closeConnections();
+			return;
+		}
+		
+		LOG.info("STARTING PHASE 1: copying data from MS SQL source databases to local disk");
+		
+		// phase 1: copy data from MS SQL sources to local disk
+		try {
+			for(CopyTable table : tablesToCopy.values())
 			{
-				LOG.info("No indication of new data from scheduling source '" + config.getSchedulerTable() + "." + config.getSchedulerColumn() + "'");
+				copyData(table);
 			}
-			else
+		} catch (Exception e) {
+			anyErrors = true;
+			LOG.error("Unable to copy data to disk", e);
+			EmailUtil.sendMail("Unable to copy data with the following error: "+ e.getStackTrace(), "Unable to copy data from table in monetdb", config.getDatabaseProperties());
+		}
+		
+		LOG.info("PHASE 1 FINISHED: all data copied from MS SQL source databases to local disk");
+		
+		LOG.info("STARTING PHASE 2: loading data into target MonetDB database");
+		
+		// get a SQL-friendly representation of the current date/time of the load
+		// used for the fast view switching tables
+		DateFormat dateFormat = new SimpleDateFormat("yyyy_MM_dd_HH_mm_ss");
+		Calendar cal = Calendar.getInstance();
+		String loadDateStr = dateFormat.format(cal.getTime());
+		
+		// phase 2: load data from disk into MonetDB
+		try {
+			for (CopyTable table : tablesToCopy.values())
 			{
-				// check if all MSSQL tables have data and stop the copy if one doesn't
-				if (MssqlUtil.allMSSQLTablesHaveData(tablesToCopy))
+				// pass load date to table
+				table.setLoadDate(loadDateStr);
+								
+				// load new data into MonetDB
+				loadData(table);
+			}
+		} catch (Exception e) {
+			anyErrors = true;
+			LOG.error("Unable to load data into MonetDB", e);
+			EmailUtil.sendMail("Unable to load data with the following error: "+ e.getStackTrace(), "Unable to load data table into monetdb", config.getDatabaseProperties());
+		}
+		
+		LOG.info("PAHSE 2 FINISHED: all data loaded into target MonetDB database");
+		
+		LOG.info("STARTING PHASE 3: switching all view-based tables to new data");
+		
+		// we need another loop through the tables for temp table copying and view
+		// switching. We do this after the copy actions to reduce down-time
+		
+		// phase 3: switch views (for view-based tables)
+		for (CopyTable copyTable : tablesToCopy.values())
+		{
+			// if there are any temp table copies configured, then copy the
+			// temp tables to result tables. We do this after the rest is done to
+			// reduce down-time
+			if (copyTable.isCopyViaTempTable())
+			{
+				copyTempTableToCurrentTable(copyTable);
+			}
+			
+			try
+			{
+				// set view to current table because it contains the new data now
+				if (copyTable.isUseFastViewSwitching())
 				{
-					for (CopyTable table : tablesToCopy.values())
-					{
-						try
-						{
-							// backup table if configured and switch view to the backup table
-							if (table.isUseFastViewSwitching())
-								backupTableAndSwitchView(table.getCurrentTable());
-	
-							// copy new data to monetdb
-							copyTable(table);
-						}
-						catch (SQLException e)
-						{
-							anyErrors = true;
-							LOG.error("Unable to copy data from table '" + table.getFromName() + "'", e);
-							EmailUtil.sendMail("Unable to copy data from table" + table.getFromName() + " with the following error: "+ e.getStackTrace(), "Unable to copy data from table in monetdb", config.getDatabaseProperties());
-						}
-					}
-	
-					// we need another loop through the tables for temp table copying and view
-					// switching. We do this after the copy actions to reduce down-time
-					for (CopyTable copyTable : tablesToCopy.values())
-					{
-						// if there are any temp table copies configured, then copy the
-						// temp tables to result tables. We do this after the rest is done to
-						// reduce down-time
-						if (copyTable.isCopyViaTempTable())
-						{
-							copyTempTableToCurrentTable(copyTable);
-						}
-						try
-						{
-							// set view to current table because it contains the new data now
-							if (copyTable.isUseFastViewSwitching())
-								MonetDBUtil.dropAndRecreateViewForTable(copyTable.getSchema(),
-									copyTable.getToName(), copyTable.getCurrentTable());
-						}
-						catch (SQLException e)
-						{
-							anyErrors = true;
-							LOG.error("Unable to create view '" + copyTable.getToViewSql() + "'", e);
-							EmailUtil.sendMail("Unable to create view" + copyTable.getToViewSql() + " with the following error: "+ e.toString(), "Unable to create view in monetdb", config.getDatabaseProperties());
-						}
-					}
+					MonetDBUtil.dropAndRecreateViewForTable(copyTable.getSchema(),
+						copyTable.getToName(), copyTable.getCurrentTable());
 				}
 			}
-			
-			// write out info for schedule
-			if (config.isSchedulingEnabled() && !anyErrors)
+			catch (SQLException e)
 			{
-				writeScheduleInfo(lastRunValue, lastRunColType);
+				anyErrors = true;
+				LOG.error("Unable to create view '" + copyTable.getToViewSql() + "'", e);
+				EmailUtil.sendMail("Unable to create view" + copyTable.getToViewSql() + " with the following error: "+ e.toString(), "Unable to create view in monetdb", config.getDatabaseProperties());
 			}
 		}
-
-		CopyToolConnectionManager.getInstance().closeConnections();
 		
-		markAsFinished();
-
-		LOG.info("Finished!");
-	}
-	
-	/**
-	 * Checks whether another instance of the same job is already running on the same server
-	 */
-	public boolean isInstanceRunning ()
-	{
-		File runFile = getRunFile();
-		return runFile.exists();
-	}
-	
-	/**
-	 * Marks the job as running
-	 * @throws IOException 
-	 */
-	public void markAsRunning () throws IOException
-	{
-		File runFile = getRunFile();
-		runFile.createNewFile();
-		LOG.info("Marked job as currently running");
-	}
-	
-	/**
-	 * Mark the job as finished (no longer running)
-	 */
-	public void markAsFinished ()
-	{
-		File runFile = getRunFile();
-		if (runFile.exists())
+		LOG.info("PHASE 3 FINISHED: all views have been switched");
+		
+		LOG.info("STARTING PHASE 4: cleanup of data from disk and database");
+		
+		// phase 4: remove temp data from disk and target database
+		for (CopyTable copyTable : tablesToCopy.values())
 		{
-			runFile.delete();
-			LOG.info("Marked job as finished");
+			// remove temp data from disk
+			removeTempData(copyTable);
+			
+			// remove old versions of view-based tables
+			// that are no longer needed
+			try {
+				dropOldTables(copyTable);
+			} catch (SQLException e) {
+				LOG.warn("Got SQLException when trying to drop older versions of table '" + copyTable.getToName() + "': " + e.getMessage(), e);
+			}
 		}
-	}
+		
+		LOG.info("PHASE 4 FINISHED: all data removed from disk and database");
+
+		// write out info for trigger
+		if (config.isTriggerEnabled() && !anyErrors)
+		{
+			writeTriggerInfo(lastRunValue, lastRunColType);
+		}		
+		
+		CopyToolConnectionManager.getInstance().closeConnections();
 	
-	public File getRunFile ()
-	{
-		return new File(getUserDir().getAbsolutePath() + "/." + config.getJobId() + "-running");
+		LOG.info("Finished!");
 	}
 	
 	public File getUserDir ()
@@ -220,7 +309,8 @@ public class CopyTool
 	 */
 	private boolean checkForNewData ()
 	{		
-		LOG.info("Checking scheduling source '" + config.getSchedulerTable() + "." + config.getSchedulerColumn() + "'");
+		LOG.info("Checking trigger source '" + config.getTriggerSource() + "." + 
+				config.getTriggerTable() + "." + config.getTriggerColumn() + "'");
 		
 		// get value from source
 		Object newValue = null;
@@ -228,12 +318,12 @@ public class CopyTool
 		try 
 		{
 			Statement selectStmt =
-					CopyToolConnectionManager.getInstance().getMssqlConnection().createStatement();
+					CopyToolConnectionManager.getInstance().getMssqlConnection(config.getTriggerSource()).createStatement();
 			
 			ResultSet res = selectStmt.executeQuery(
-				"SELECT TOP 1 [" + config.getSchedulerColumn() + "] "
-				+ "FROM [" + config.getSchedulerTable() + "] "
-				+ "ORDER BY [" + config.getSchedulerColumn() + "] DESC"
+				"SELECT TOP 1 [" + config.getTriggerColumn() + "] "
+				+ "FROM [" + config.getTriggerTable() + "] "
+				+ "ORDER BY [" + config.getTriggerColumn() + "] DESC"
 			);
 			
 			// no rows in table? then we cannot determine any indication
@@ -366,9 +456,9 @@ public class CopyTool
 	}
 	
 	/**
-	 * Writes the lastrun info for the scheduling to disk
+	 * Writes the lastrun info for the trigger to disk
 	 */
-	private boolean writeScheduleInfo (Object newValue, int colType)
+	private boolean writeTriggerInfo (Object newValue, int colType)
 	{
 		File scheduleFile = getLastRunFile();
 		
@@ -394,196 +484,119 @@ public class CopyTool
 		}
 		
 	}
-
+	
 	/**
-	 * Backup a table by copying the data into a backup table named backup_currentTable by
-	 * currentTable and metaData of the MSSQL table that is copied.
-	 * 
-	 * @throws SQLException
+	 * Drops older versions of tables that are no longer used by the view.
+	 * @throws SQLException 
 	 */
-	private void backupTableAndSwitchView(MonetDBTable currentTable) throws SQLException
+	private void dropOldTables(CopyTable table) throws SQLException
 	{
-		LOG.info("Backupping " + currentTable.getToTableSql());
+		LOG.info("Dropping older versions of table '" + table.getToName() + "'...");
 		
-		// create a MonetDBTable object for the backup table
-		MonetDBTable backupTable = new MonetDBTable(currentTable.getCopyTable());
+		Statement q =
+			CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
 		
-		// use the copyTable.toName
-		backupTable.setName(currentTable.getCopyTable().getToName());
-		backupTable.setBackupTable(true);
+		ResultSet result =
+			q.executeQuery("SELECT name FROM sys.tables WHERE name LIKE '" + table.getToName()
+				+ "_20%_%' AND name <> '" + table.getToName() + "' "
+				+ "AND schema_id = (SELECT id from sys.schemas WHERE name = '" + table.getSchema()
+				+ "') AND query IS NULL ORDER BY name DESC");
 		
-		// drop and recreate backup table regardless if it exists
-		LOG.info("Drop backup table '" + backupTable.getToTableSql() + "' if exists");
-		MonetDBUtil.dropMonetDBTable(backupTable);
+		int i = 0;
+		int dropCount = 0;
+		Statement stmtDrop =
+			CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
+		while(result.next())
+		{
+			i++;
+			
+			// if table is a fast view-switching table then
+			// 		skip first result -> is current table and referenced by view
+			// 		skip second result -> as backup (TODO: perhaps make this configurable?)
+			if (table.isUseFastViewSwitching())
+				if (i == 1 || i == 2)
+					continue;
+			
+			// build DROP query
+			StringBuilder query = new StringBuilder("DROP TABLE ");
+			
+			if (!StringUtils.isEmpty(table.getSchema()))
+				query.append(MonetDBUtil.quoteMonetDbIdentifier(table.getSchema())).append(".");
+			
+			query.append(MonetDBUtil.quoteMonetDbIdentifier(result.getString("name"))).append(";");
+			
+			// execute DROP query
+			stmtDrop.executeUpdate(query.toString());			
+			dropCount++;
+		}
 		
-		// copy from currentTable to backup table
-		MonetDBUtil.copyMonetDBTableToNewMonetDBTable(currentTable, backupTable);
+		if (i == 0 || (table.isUseFastViewSwitching() && i <= 2))
+			LOG.info("Table '" + table.getToName() + "' has no older versions");
+		else
+			LOG.info("Dropped " + dropCount + " older versions of table '" + table.getToName() + "'");
 		
-		LOG.info("Switch view to '" + backupTable.getToTableSql() + "'");
-		
-		// drop and recreate the view for the table and point to the just created backup
-		// table so we can fill the current table with new data
-		MonetDBUtil.dropAndRecreateViewForTable(currentTable.getCopyTable().getSchema(),
-			currentTable.getCopyTable().getToName(), backupTable);
+		result.close();
+		q.close();
 	}
-
+	
 	/**
-	 * Copy a MSSQL table to MonetDB. This will copy the MSSQL data to the result table or
-	 * a temporary table if configured that way. This includes auto-creating the necessary
-	 * tables and importing the data using selects or copy into.
+	 * Removes temp data from local disk
+	 * 
 	 */
-	private void copyTable(CopyTable table) throws SQLException
+	private void removeTempData(CopyTable table)
 	{
-		LOG.info("Starting with copy of table " + table.getFromName() + "...");
-
+		File dataFile = new File(config.getTempDirectory(), table.getTempFilePrefix() + "_data.csv");
+		File countFile = new File(config.getTempDirectory(), table.getTempFilePrefix() + "_count.txt");
+		File metaDataFile = new File(config.getTempDirectory(), table.getTempFilePrefix() + "_metadata.ser");
+		
+		dataFile.delete();
+		countFile.delete();
+		metaDataFile.delete();
+	}
+	
+	/**
+	 * Copies data from a MSSQL table to local disk, including meta data and row count.
+	 * @throws SQLException 
+	 */
+	private void copyData(CopyTable table) throws Exception
+	{
+		LOG.info("Starting with copy of data from table " + table.getFromName() + " to disk...");
+		
 		// select data from MS SQL Server
 		Statement selectStmt =
-			CopyToolConnectionManager.getInstance().getMssqlConnection().createStatement();
+			CopyToolConnectionManager.getInstance().getMssqlConnection(table.getSource()).createStatement();
 
 		// get number of rows in table
 		ResultSet resultSet =
 			selectStmt.executeQuery("SELECT COUNT(*) FROM [" + table.getFromName() + "]");
 		resultSet.next();
-
+		
 		long rowCount = resultSet.getLong(1);
 		LOG.info("Found " + rowCount + " rows in table " + table.getFromName());
-
+		
 		resultSet.close();
-
+		
 		// get all data from table
 		resultSet = selectStmt.executeQuery("SELECT * FROM [" + table.getFromName() + "]");
 
 		// get meta data (column info and such)
 		ResultSetMetaData metaData = resultSet.getMetaData();
-
-		MonetDBTable copyToTable =
-			table.isCopyViaTempTable() ? table.getTempTable() : table.getCurrentTable();
-
-		// check tables in monetdb
-		checkTableInMonetDb(copyToTable, metaData);
-
-		// do truncate?
-		if (table.truncate())
-		{
-			MonetDBUtil.truncateMonetDBTable(copyToTable);
-		}
-
-		// copy data
-		if (table.getCopyMethod() == CopyTable.COPY_METHOD_COPYINTO
-			&& CopyToolConnectionManager.getInstance().getMonetDbServer() != null)
-		{
-			try
-			{
-				copyDataWithCopyInto(copyToTable, resultSet, metaData, rowCount, table.isUseLockedMode());
-			}
-			catch (Exception e)
-			{
-				LOG.error("Copying data failed", e);
-				EmailUtil.sendMail("Copying data failed with the following error: "+ e.getStackTrace(), "Copying failed in monetdb", config.getDatabaseProperties());
-			}
-		}
-		else if (table.getCopyMethod() == CopyTable.COPY_METHOD_COPYINTO_VIA_TEMP_FILE)
-		{
-			try {
-				copyDataWithCopyIntoViaTempFile(copyToTable, resultSet, metaData, rowCount, table.isUseLockedMode());
-			}
-			catch (Exception e)
-			{
-				LOG.error("Copying data failed", e);
-				EmailUtil.sendMail("Copying data failed with the following error: "+ e.getStackTrace(), "Copying failed in monetdb", config.getDatabaseProperties());
-			}
-		}
-		else
-		{
-			try
-			{
-				copyData(copyToTable, resultSet, metaData, rowCount);
-			}
-			catch (SQLException e)
-			{
-				LOG.error("Copying data failed", e);
-				EmailUtil.sendMail("Copying data failed with the following error: "+ e.getStackTrace(), "Copying failed in monetdb", config.getDatabaseProperties());
-
-				// print full chain of exceptions
-				SQLException nextException = e.getNextException();
-				while (nextException != null)
-				{
-					nextException.printStackTrace();
-					nextException = nextException.getNextException();
-				}
-			}
-		}
-
-		// close everything again
-		resultSet.close();
-
-		selectStmt.close();
-
-		LOG.info("Finished copy of table " + table.getFromName());
-	}
-
-	private void checkTableInMonetDb(MonetDBTable monetDBTable, ResultSetMetaData metaData)
-			throws SQLException
-	{
-		boolean tableExists = MonetDBUtil.monetDBTableExists(monetDBTable);
-		// can't auto create?
-		if (tableExists == false && monetDBTable.getCopyTable().create() == false)
-		{
-			throw new SQLException("Table " + monetDBTable.getToTableSql()
-				+ " does not exist in MonetDB database and auto-create is set to false");
-		}
-
-		// need to drop? don't drop when useFastViewSwitching is enabled because then we
-		// have a view
-		if (tableExists && monetDBTable.getCopyTable().drop())
-		{
-			MonetDBUtil.dropMonetDBTable(monetDBTable);
-			tableExists = false;
-		}
-
-		if (tableExists)
-		{
-			// verify if table is as expected
-			MonetDBUtil.verifyColumnsOfExistingTable(monetDBTable, metaData);
-		}
-		else
-		{
-			MonetDBUtil.createMonetDBTable(monetDBTable, metaData);
-		}
-	}
-
-	private void copyTempTableToCurrentTable(CopyTable copyTable)
-	{
-		// create table schema.temptable as select * from schema.currentTable with data;
-		LOG.info("Copying the temp table to the result table");
-		try
-		{
-			// drop result table before replacing with temp table
-			if (MonetDBUtil.monetDBTableExists(copyTable.getCurrentTable()))
-			{
-				MonetDBUtil.dropMonetDBTable(copyTable.getCurrentTable());
-			}
-			MonetDBUtil.copyMonetDBTableToNewMonetDBTable(copyTable.getTempTable(),
-				copyTable.getCurrentTable());
-			// drop temp table, we wont need it anymore
-			MonetDBUtil.dropMonetDBTable(copyTable.getTempTable());
-		}
-		catch (SQLException e)
-		{
-			LOG.error("Error copying temp table to current table", e);
-
-			EmailUtil.sendMail("Error copying temp table to current table: "+ e.getStackTrace(), "Error copying temp table to current table in monetdb", config.getDatabaseProperties());
-		}
-
-		LOG.info("Finished copying the temp table to the result table");
-	}
-	
-	private void copyDataWithCopyIntoViaTempFile (MonetDBTable monetDBTable, ResultSet resultSet,
-			ResultSetMetaData metaData, long rowCount, boolean useLockedMode) throws Exception
-	{
-		LOG.info("Using COPY INTO VIA TEMP FILE to copy data to table " + monetDBTable.getToTableSql() + "...");
-	
-		File temp = File.createTempFile("table_" + monetDBTable.getName(), ".csv");		
+		
+		String tmpDir = config.getTempDirectory();
+		
+		String tmpFilePrefix = table.getTempFilePrefix();
+		
+		// serialize meta data to disk
+		File metaDataFile = new File(tmpDir, tmpFilePrefix + "_metadata.ser");
+		FileOutputStream fileOut = new FileOutputStream(metaDataFile);
+		ObjectOutputStream out = new ObjectOutputStream(fileOut);
+		out.writeObject(new SerializableResultSetMetaData(metaData));
+		out.close();
+		fileOut.close();
+		LOG.info("Serialized metadata to temp file: " + metaDataFile.getAbsolutePath());
+		
+		// write data to disk
+		File temp = new File(tmpDir, tmpFilePrefix + "_data.csv");		
 		LOG.info("Writing data to temp file: " + temp.getAbsolutePath());
 		
 		BufferedWriter bw = new BufferedWriter(new FileWriter(temp));
@@ -631,143 +644,143 @@ public class CopyTool
 			if (insertCount % 100000 == 0)
 			{
 				bw.flush();
-				printInsertProgress(startTime, insertCount, rowCount);
+				printInsertProgress(startTime, insertCount, rowCount, "written to disk");
 			}
 		}
 		bw.flush();
 		bw.close();
-		printInsertProgress(startTime, insertCount, rowCount);
-
-		LOG.info("Finalising COPY INTO... this may take a while!");
+		printInsertProgress(startTime, insertCount, rowCount, "written to disk");
 		
-		Statement copyStmt =
-				CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
+		// write insert count to disk as well
+		File countFile = new File(tmpDir, tmpFilePrefix + "_count.txt");
+		Writer wr = new FileWriter(countFile);
+		wr.write(String.valueOf(insertCount));
+		wr.close();
+		LOG.info("Written row count to temp file: " + countFile.getAbsolutePath());
 		
-		String query =
-			"COPY " + insertCount + " RECORDS INTO " + monetDBTable.getToTableSql()
-				+ " FROM '" + temp.getAbsolutePath() + "' USING DELIMITERS ',','\\n','\"' NULL AS ''";
-				
-		if (useLockedMode)
-		{
-			query += " LOCKED";
-		}
-		
-		query += ";";
-		
-		// execute COPY INTO statement
-		copyStmt.execute(query);
-		
-		copyStmt.close();
-		
-		try {
-			temp.delete();
-		} catch (SecurityException e) {
-			// don't care
-		}	
-		
-		LOG.info("Finished copying data");	
+		LOG.info("Finished copying data of table " + table.getFromName() + " to disk!");
 	}
-
-	private void copyDataWithCopyInto(MonetDBTable monetDBTable, ResultSet resultSet,
-			ResultSetMetaData metaData, long rowCount, boolean useLockedMode) throws Exception
+	
+	/**
+	 * Loads data from disk into MonetDB, as efficiently as possible. Tries to do so
+	 * using various methods.
+	 */
+	private void loadData(CopyTable table) throws Exception
 	{
-		LOG.info("Using COPY INTO to copy data to table " + monetDBTable.getToTableSql() + "...");
-
-		BufferedMCLReader in =
-			CopyToolConnectionManager.getInstance().getMonetDbServer().getReader();
-		BufferedMCLWriter out =
-			CopyToolConnectionManager.getInstance().getMonetDbServer().getWriter();
-
-		String error = in.waitForPrompt();
-		if (error != null)
-			throw new Exception(error);
-
-		String query =
-			"COPY INTO " + monetDBTable.getToTableSql()
-				+ " FROM STDIN USING DELIMITERS ',','\\n','\"' NULL AS ''";
-				
-		if (useLockedMode)
-		{
-			query += " LOCKED";
-		}
-		
-		query += ";";
-
-		// the leading 's' is essential, since it is a protocol
-		// marker that should not be omitted, likewise the
-		// trailing semicolon
-		out.write('s');
-		out.write(query);
-		out.newLine();
-
+		LOG.info("Starting to load data of table " + table.getFromName() + " into MonetDB...");
 		long startTime = System.currentTimeMillis();
-		long insertCount = 0;
-		int columnCount = metaData.getColumnCount();
-
-		while (resultSet.next())
+		
+		// verify all temp files are available
+		File dataFile = new File(config.getTempDirectory(), table.getTempFilePrefix() + "_data.csv");
+		File countFile = new File(config.getTempDirectory(), table.getTempFilePrefix() + "_count.txt");
+		File metaDataFile = new File(config.getTempDirectory(), table.getTempFilePrefix() + "_metadata.ser");
+		
+		if (!dataFile.exists())
 		{
-			for (int i = 1; i <= columnCount; i++)
-			{
-				Object value = resultSet.getObject(i);
-				String valueStr = "";
+			throw new Exception("Missing temporary data file for table '" + table.getFromName() + "'");
+		}
+		
+		if (!countFile.exists())
+		{
+			throw new Exception("Missing temporary count file for table '" + table.getFromName() + "'");
+		}
+		
+		if (!metaDataFile.exists())
+		{
+			throw new Exception("Missing temporary metadata file for table '" + table.getFromName() + "'");
+		}
+		
+		// read count
+		BufferedReader br = new BufferedReader(new FileReader(countFile));
+		String countStr = br.readLine();
+		br.close();
+		
+		Long insertCount = null;
+		try {
+			insertCount = Long.parseLong(countStr);
+		} catch (NumberFormatException e) {
+			throw new Exception("Unable to read row count from temporary count file for table '" + table.getFromName() + "'");
+		}
+		
+		if (insertCount == null)
+			throw new Exception("Unable to read row count from temporary count file for table '" + table.getFromName() + "'");
+		
+		// read metadata
+		SerializableResultSetMetaData metaData = null;
+		try {
+			FileInputStream fileIn = new FileInputStream(metaDataFile);
+		    ObjectInputStream in = new ObjectInputStream(fileIn);
+		    metaData = (SerializableResultSetMetaData) in.readObject();
+		    in.close();
+		    fileIn.close();
+		} catch (IOException | ClassNotFoundException e) {
+			throw new Exception("Unable to read metadata from temporary metadata file for table '" + table.getFromName() + "'", e);
+		}
+		
+		if (metaData == null)
+			throw new Exception("Unable to read metadata from temporary metadata file for table '" + table.getFromName() + "'");
+		
+		MonetDBTable copyToTable =
+			table.isCopyViaTempTable() ? table.getTempTable() : table.getCurrentTable();
 
-				if (value == null)
-				{
-					valueStr = "";
-				}
-				else
-				{
-					valueStr = value.toString();
-
-					// escape \ with \\
-					valueStr = valueStr.replaceAll("\\\\", "\\\\\\\\");
-
-					// escape " with \"
-					valueStr = valueStr.replaceAll("\"", "\\\\\"");
-				}
-
-				out.write("\"" + valueStr + "\"");
-
-				// column separator (not for last column)
-				if (i < columnCount)
-				{
-					out.write(",");
-				}
+		// check tables in monetdb
+		checkTableInMonetDb(copyToTable, metaData);
+		
+		// do truncate?
+		if (table.truncate())
+		{
+			MonetDBUtil.truncateMonetDBTable(copyToTable);
+		}
+		
+		// load data
+		boolean isLoaded = false;
+		
+		// is it allowed to use COPY INTO method?
+		if (copyToTable.getCopyTable().getCopyMethod() != CopyTable.COPY_METHOD_INSERT)
+		{
+			// try to load directly via COPY INTO FROM FILE
+			try {
+				isLoaded = loadDataFromFile(copyToTable, dataFile, metaData, insertCount, table.isUseLockedMode());
+			} catch (SQLException e) {
+				LOG.warn("Failed to load data directly from file: " + e.getMessage());
 			}
-
-			// record separator
-			out.newLine();
-
-			insertCount++;
-
-			if (insertCount % 100000 == 0)
+					
+			// not loaded? then try loading via COPY INTO FROM STDIN
+			if (!isLoaded)
 			{
-				printInsertProgress(startTime, insertCount, rowCount);
+				try {
+					isLoaded = loadDataFromStdin (copyToTable, dataFile, metaData, insertCount, table.isUseLockedMode());
+				} catch (Exception e) {
+					LOG.warn("Failed to load data directly via STDIN: " + e.getMessage());
+				}
 			}
 		}
-		printInsertProgress(startTime, insertCount, rowCount);
-
-		LOG.info("Finalising COPY INTO... this may take a while!");
-
-		out.writeLine("");
-
-		error = in.waitForPrompt();
-		if (error != null)
-			throw new Exception(error);
-
-		out.writeLine(""); // server wants more, we're going to tell it, this is it
-
-		error = in.waitForPrompt();
-		if (error != null)
-			throw new Exception(error);
-
-		LOG.info("Finished copying data");
+		
+		// still not loaded? final try with manual INSERTs
+		if (!isLoaded)
+		{
+			try {
+				isLoaded = loadDataWithInserts (copyToTable, dataFile, metaData, insertCount);
+			} catch (Exception e) {
+				LOG.error("Failed to load data with INSERTs: " + e.getMessage());
+			}
+		}
+		
+		// still not loaded? then unable to load, throw exception
+		if (!isLoaded) 
+		{
+			throw new Exception("Unable to load data into MonetDB for table " + table.getFromName());
+		}
+		
+		long loadTime = (System.currentTimeMillis() - startTime) / 1000;
+		LOG.info("Finished loading data into " + copyToTable.getName() + " in " + loadTime + " seconds");
 	}
-
-	private void copyData(MonetDBTable monetDBTable, ResultSet resultSet,
-			ResultSetMetaData metaData, long rowCount) throws SQLException
+	
+	private boolean loadDataWithInserts(MonetDBTable monetDBTable, File dataFile,
+			ResultSetMetaData metaData, long rowCount) throws SQLException, IOException
 	{
-		LOG.info("Copying data to table " + monetDBTable.getToTableSql() + "...");
+		LOG.info("Loading data with INSERTs into table " + monetDBTable.getToTableSql() + "...");
+		LOG.info("Batch size set: " + config.getBatchSize());
 
 		// build insert SQL
 		StringBuilder insertSql = new StringBuilder("INSERT INTO ");
@@ -796,33 +809,22 @@ public class CopyTool
 
 		int batchCount = 0;
 		long insertCount = 0;
-		while (resultSet.next())
+		
+	    CSVReader reader = new CSVReader(new FileReader(dataFile));
+	    String [] line;
+	    while ((line = reader.readNext()) != null)
 		{
 			for (int i = 1; i <= metaData.getColumnCount(); i++)
 			{
-				Object value = resultSet.getObject(i);
+				String value = line[i-1];
 
-				if (value == null)
+				if (StringUtils.isEmpty(value))
 				{
 					values[i - 1] = "NULL";
 				}
-				else if (value instanceof Number)
-				{
-					values[i - 1] = value.toString();
-
-					// empty value is unacceptable here, replace with NULL
-					if (StringUtils.isEmpty(values[i - 1]))
-					{
-						values[i - 1] = "NULL";
-					}
-				}
-				else if (value instanceof String || value instanceof Timestamp || value instanceof Clob)
-				{
-					values[i - 1] = MonetDBUtil.quoteMonetDbValue(value.toString());
-				}
 				else
 				{
-					throw new SQLException("Unknown value type: " + value.getClass().getName());
+					values[i - 1] = MonetDBUtil.quoteMonetDbValue(value);
 				}
 			}
 
@@ -847,6 +849,8 @@ public class CopyTool
 				printInsertProgress(startTime, insertCount, rowCount);
 			}
 		}
+		
+		reader.close();
 
 		if (batchCount > 0)
 		{
@@ -863,10 +867,185 @@ public class CopyTool
 
 		CopyToolConnectionManager.getInstance().getMonetDbConnection().setAutoCommit(true);
 
-		LOG.info("Finished copying data");
+		return true;
+	}
+	
+	private boolean loadDataFromStdin (MonetDBTable monetDBTable, File dataFile,
+		ResultSetMetaData metaData, long rowCount, boolean useLockedMode)  
+		throws Exception
+	{
+		LOG.info("Loading data via STDIN into " + monetDBTable.getToTableSql());
+		
+		BufferedMCLReader in =
+			CopyToolConnectionManager.getInstance().getMonetDbServer().getReader();
+		BufferedMCLWriter out =
+			CopyToolConnectionManager.getInstance().getMonetDbServer().getWriter();
+
+		String error = in.waitForPrompt();
+		if (error != null)
+			throw new Exception(error);
+		
+		StringBuilder query = new StringBuilder();
+		query.append("COPY ");
+		
+		if (rowCount > 0)
+			query.append(rowCount).append(" RECORDS ");
+		
+		query.append(" INTO ").append(monetDBTable.getToTableSql());		
+		query.append(" FROM STDIN USING DELIMITERS ',','\\n','\"' NULL AS ''");
+		
+		if (useLockedMode)
+			query.append(" LOCKED");
+		
+		query.append(";");
+
+		// the leading 's' is essential, since it is a protocol
+		// marker that should not be omitted, likewise the
+		// trailing semicolon
+		out.write('s');
+		out.write(query.toString());
+		out.newLine();
+
+		long startTime = System.currentTimeMillis();
+		long insertCount = 0;
+		
+		BufferedReader br = new BufferedReader(new FileReader(dataFile));
+
+		String line;
+		while((line = br.readLine()) != null)
+		{
+			// write out record
+			out.write(line);
+
+			// record separator
+			out.newLine();
+
+			insertCount++;
+
+			if (insertCount % 100000 == 0)
+			{
+				printInsertProgress(startTime, insertCount, rowCount, "processed");
+			}
+		}
+		printInsertProgress(startTime, insertCount, rowCount, "processed");
+		br.close();
+		
+		LOG.info("Finalising COPY INTO... this may take a while!");
+
+		out.writeLine("");
+
+		error = in.waitForPrompt();
+		if (error != null)
+			throw new Exception(error);
+
+		out.writeLine(""); // server wants more, we're going to tell it, this is it
+
+		error = in.waitForPrompt();
+		if (error != null)
+			throw new Exception(error);
+		
+		return true;
+	}
+	
+	private boolean loadDataFromFile (MonetDBTable monetDBTable, File dataFile,
+			ResultSetMetaData metaData, long rowCount, boolean useLockedMode) throws SQLException
+	{
+		LOG.info("Loading data directly from file into " + monetDBTable.getToTableSql());
+		
+		Statement copyStmt =
+				CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
+				
+		StringBuilder query = new StringBuilder();
+		query.append("COPY ");
+		
+		if (rowCount > 0)
+			query.append(rowCount).append(" RECORDS ");
+		
+		query.append(" INTO ").append(monetDBTable.getToTableSql());
+		query.append(" FROM '").append(dataFile.getAbsolutePath()).append("'");
+		query.append(" USING DELIMITERS ',','\\n','\"' NULL AS ''");
+		
+		if (useLockedMode)
+			query.append(" LOCKED");
+		
+		query.append(";");
+		
+		// execute COPY INTO statement
+		copyStmt.execute(query.toString());
+		
+		copyStmt.close();
+		
+		return true;
 	}
 
-	private void printInsertProgress(long startTime, long insertCount, long rowCount)
+	private void checkTableInMonetDb(MonetDBTable monetDBTable, ResultSetMetaData metaData)
+			throws SQLException
+	{
+		boolean tableExists = MonetDBUtil.monetDBTableExists(monetDBTable);
+		
+		// can't auto create?
+		if (tableExists == false && monetDBTable.getCopyTable().create() == false)
+		{
+			throw new SQLException("Table " + monetDBTable.getToTableSql()
+				+ " does not exist in MonetDB database and auto-create is set to false");
+		}
+
+		// need to drop? don't drop when useFastViewSwitching is enabled because then we
+		// have a view
+		if (!monetDBTable.getCopyTable().isUseFastViewSwitching())
+		{
+			if (tableExists && monetDBTable.getCopyTable().drop())
+			{
+				MonetDBUtil.dropMonetDBTableOrView(monetDBTable);
+				tableExists = false;
+			}
+		}
+
+		if (tableExists)
+		{
+			// verify if table is as expected
+			MonetDBUtil.verifyColumnsOfExistingTable(monetDBTable, metaData);
+		}
+		else
+		{
+			MonetDBUtil.createMonetDBTable(monetDBTable, metaData);
+		}
+	}
+
+	private void copyTempTableToCurrentTable(CopyTable copyTable)
+	{
+		// create table schema.temptable as select * from schema.currentTable with data;
+		LOG.info("Copying the temp table to the result table");
+		try
+		{
+			// drop result table before replacing with temp table
+			if (MonetDBUtil.monetDBTableExists(copyTable.getCurrentTable()))
+			{
+				MonetDBUtil.dropMonetDBTable(copyTable.getCurrentTable());
+			}
+			MonetDBUtil.copyMonetDBTableToNewMonetDBTable(copyTable.getTempTable(),
+				copyTable.getCurrentTable());
+			// drop temp table, we wont need it anymore
+			MonetDBUtil.dropMonetDBTable(copyTable.getTempTable());
+		}
+		catch (SQLException e)
+		{
+			LOG.error("Error copying temp table to current table", e);
+
+			EmailUtil.sendMail("Error copying temp table to current table: "+ e.getStackTrace(), "Error copying temp table to current table in monetdb", config.getDatabaseProperties());
+		}
+
+		LOG.info("Finished copying the temp table to the result table");
+	}
+
+	
+
+	private void printInsertProgress (long startTime, long insertCount, long rowCount)
+	{
+		printInsertProgress(startTime, insertCount, rowCount, "inserted");
+	}
+	
+	private void printInsertProgress(long startTime, long insertCount, long rowCount, String action)
 	{
 		long totalTime = System.currentTimeMillis() - startTime;
 
@@ -875,12 +1054,36 @@ public class CopyTool
 
 		long timeLeft = Float.valueOf((rowCount - insertCount) * timePerRecord).longValue();
 
-		LOG.info("Records inserted");
+		LOG.info("Records " + action);
 		float perc = ((float) insertCount / (float) rowCount) * 100;
 		LOG.info("Progress: " + insertCount + " out of " + rowCount + " ("
 			+ formatPerc.format(perc) + "%)");
 		LOG.info("Time: " + (totalTime / 1000) + " seconds spent; estimated time left is "
 			+ timeLeft + " seconds");
+	}
+	
+	private void loadDatabaseDrivers () throws CopyToolException
+	{
+		// make sure JDBC drivers are loaded
+		try
+		{
+			Class.forName("nl.cwi.monetdb.jdbc.MonetDriver");
+		}
+		catch (ClassNotFoundException e)
+		{
+			EmailUtil.sendMail("Unable to load MonetDB JDBC driverwith the following error: "+ e.getStackTrace(), "Unable to load MonetDB JDBC driver in monetdb", config.getDatabaseProperties());
+			throw new CopyToolException("Unable to load MonetDB JDBC driver");
+		}
+
+		try
+		{
+			Class.forName("net.sourceforge.jtds.jdbc.Driver");
+		}
+		catch (ClassNotFoundException e)
+		{
+			EmailUtil.sendMail("Unable to load MS SQL jTDS JDBC driver with the following error: "+ e.getStackTrace(), "Unable to load MS SQL jTDS JDBC driver in monetdb", config.getDatabaseProperties());
+			throw new CopyToolException("Unable to load jTDS JDBC driver");
+		}
 	}
 
 }

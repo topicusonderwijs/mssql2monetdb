@@ -35,7 +35,8 @@ public class MonetDBTable
 		else if (backupTable)
 			return copyTable.getBackupTablePrefix() + name;
 		else if (copyTable.isUseFastViewSwitching())
-			return copyTable.getCurrentTablePrefix() + name;
+			return name + "_" + copyTable.getLoadDate();
+		
 		return name;
 	}
 

@@ -3,6 +3,7 @@ package nl.topicus.mssql2monetdb;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
 
@@ -18,11 +19,13 @@ public class CopyToolConnectionManager
 
 	private static CopyToolConnectionManager instance = null;
 
-	private Connection mssqlConn;
-
 	private Connection monetDbConn;
 
 	private MapiSocket monetDbServer;
+	
+	private HashMap<String, SourceDatabase> sourceDatabases;
+	
+	private CopyToolConfig config;
 
 	private CopyToolConnectionManager()
 	{
@@ -41,104 +44,46 @@ public class CopyToolConnectionManager
 
 		return instance;
 	}
-
-	public void openConnections(Properties databaseProperties)
+	
+	public void setConfig(CopyToolConfig config)
 	{
-		// make sure JDBC drivers are loaded
-		try
+		this.config = config;
+		this.sourceDatabases = config.getSourceDatabases();
+	}
+	
+	public void openMonetDbConnection () throws SQLException
+	{
+		Properties databaseProperties = config.getDatabaseProperties();		
+	
+		if (monetDbConn == null || monetDbConn.isClosed())
 		{
-			Class.forName("nl.cwi.monetdb.jdbc.MonetDriver");
-		}
-		catch (ClassNotFoundException e)
-		{
-			LOG.fatal("Unable to load MonetDB JDBC driver");
-			EmailUtil.sendMail("Unable to load MonetDB JDBC driverwith the following error: "+ e.getStackTrace(), "Unable to load MonetDB JDBC driver in monetdb", databaseProperties);
-			System.exit(1);
-		}
+			Properties connProps = new Properties();
+			String user = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_USER.toString());
+			String password =
+				databaseProperties.getProperty(CONFIG_KEYS.MONETDB_PASSWORD.toString());
 
-		try
-		{
-			Class.forName("net.sourceforge.jtds.jdbc.Driver");
-		}
-		catch (ClassNotFoundException e)
-		{
-			LOG.fatal("Unable to load MS SQL jTDS JDBC driver");
-			EmailUtil.sendMail("Unable to load MS SQL jTDS JDBC driver with the following error: "+ e.getStackTrace(), "Unable to load MS SQL jTDS JDBC driver in monetdb", databaseProperties);
-			System.exit(1);
-		}
-
-		try
-		{
-			if (mssqlConn == null || mssqlConn.isClosed())
+			if (StringUtils.isEmpty(user) == false && StringUtils.isEmpty(password) == false)
 			{
-				Properties connProps = new Properties();
-				String user = databaseProperties.getProperty(CONFIG_KEYS.MSSQL_USER.toString());
-				String password =
-					databaseProperties.getProperty(CONFIG_KEYS.MSSQL_PASSWORD.toString());
-				String instance =
-					databaseProperties.getProperty(CONFIG_KEYS.MSSQL_INSTANCE.toString());
-
-				if (StringUtils.isEmpty(user) == false && StringUtils.isEmpty(password) == false)
-				{
-					connProps.setProperty("user", user);
-					connProps.setProperty("password", password);
-				}
-
-				if (StringUtils.isEmpty(instance) == false)
-				{
-					connProps.setProperty("instance", instance);
-				}
-
-				String url =
-					"jdbc:jtds:sqlserver://"
-						+ databaseProperties.getProperty(CONFIG_KEYS.MSSQL_SERVER.toString()) + "/"
-						+ databaseProperties.getProperty(CONFIG_KEYS.MSSQL_DATABASE.toString());
-				LOG.info("Using connection URL for MS SQL Server: " + url);
-
-				mssqlConn = DriverManager.getConnection(url, connProps);
-				LOG.info("Opened connection to MS SQL Server");
+				connProps.setProperty("user", user);
+				connProps.setProperty("password", password);
 			}
+
+			String url =
+				"jdbc:monetdb://"
+					+ databaseProperties.getProperty(CONFIG_KEYS.MONETDB_SERVER.toString())
+					+ "/"
+					+ databaseProperties.getProperty(CONFIG_KEYS.MONETDB_DATABASE.toString());
+			LOG.info("Using connection URL for MonetDB: " + url);
+
+			monetDbConn = DriverManager.getConnection(url, connProps);
+			LOG.info("Opened connection to MonetDB");
 		}
-		catch (SQLException e)
-		{
-			LOG.fatal("Unable to open connection to MS SQL server", e);
-			EmailUtil.sendMail("Unable to open connection to MS SQL server with the following error: "+ e.getStackTrace(), "Unable to open connection to MS SQL server in monetdb", databaseProperties);
-			System.exit(1);
-		}
-
-		try
-		{
-			if (monetDbConn == null || monetDbConn.isClosed())
-			{
-				Properties connProps = new Properties();
-				String user = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_USER.toString());
-				String password =
-					databaseProperties.getProperty(CONFIG_KEYS.MONETDB_PASSWORD.toString());
-
-				if (StringUtils.isEmpty(user) == false && StringUtils.isEmpty(password) == false)
-				{
-					connProps.setProperty("user", user);
-					connProps.setProperty("password", password);
-				}
-
-				String url =
-					"jdbc:monetdb://"
-						+ databaseProperties.getProperty(CONFIG_KEYS.MONETDB_SERVER.toString())
-						+ "/"
-						+ databaseProperties.getProperty(CONFIG_KEYS.MONETDB_DATABASE.toString());
-				LOG.info("Using connection URL for MonetDB Server: " + url);
-
-				monetDbConn = DriverManager.getConnection(url, connProps);
-				LOG.info("Opened connection to MonetDB Server");
-			}
-		}
-		catch (SQLException e)
-		{
-			LOG.fatal("Unable to open connection to MonetDB server", e);
-			closeConnections();
-			System.exit(1);
-		}
-
+	}
+	
+	public void openMonetDbServerConnection ()
+	{
+		Properties databaseProperties = config.getDatabaseProperties();		
+		
 		monetDbServer = new MapiSocket();
 
 		monetDbServer.setDatabase(databaseProperties.getProperty(CONFIG_KEYS.MONETDB_DATABASE
@@ -178,27 +123,19 @@ public class CopyToolConnectionManager
 			monetDbServer.close();
 			monetDbServer = null;
 		}
-
 	}
 
 	public void closeConnections()
 	{
 		LOG.info("Closing database connections...");
-
-		try
+		
+		// close all connections to source MS SQL databases
+		for(SourceDatabase db : sourceDatabases.values())
 		{
-			if (mssqlConn != null && mssqlConn.isClosed() == false)
-			{
-				mssqlConn.close();
-				LOG.info("Closed connection to MS SQL server");
-			}
-		}
-		catch (SQLException e)
-		{
-			// don't care about this exception
-			LOG.warn("Unable to close connection to MS SQL server", e);
+			db.closeConnection();
 		}
 
+		// close connection to target MonetDB database
 		try
 		{
 			if (monetDbConn != null && monetDbConn.isClosed() == false)
@@ -220,18 +157,35 @@ public class CopyToolConnectionManager
 		}
 	}
 
-	public Connection getMssqlConnection()
+	public Connection getMssqlConnection(String sourceId) throws SQLException
 	{
-		return mssqlConn;
+		SourceDatabase db = sourceDatabases.get(sourceId);
+		
+		if (db == null)
+		{
+			LOG.warn("Unable to retrieve connection for non-existant source database '" + sourceId + "'");
+			return null;
+		}
+		else
+		{
+			return db.getConnection();
+		}
 	}
 
-	public Connection getMonetDbConnection()
+	public Connection getMonetDbConnection() throws SQLException
 	{
+		// make sure MonetDB connection is opened
+		if (monetDbConn == null || monetDbConn.isClosed())
+			openMonetDbConnection();
+		
 		return monetDbConn;
 	}
 
 	public MapiSocket getMonetDbServer()
 	{
+		if (monetDbServer == null)
+			this.openMonetDbServerConnection();
+		
 		return monetDbServer;
 	}
 

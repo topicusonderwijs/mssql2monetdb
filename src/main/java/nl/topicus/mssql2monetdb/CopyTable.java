@@ -22,8 +22,6 @@ public class CopyTable
 	public static final int COPY_METHOD_INSERT = 0;
 
 	public static final int COPY_METHOD_COPYINTO = 1;
-	
-	public static final int COPY_METHOD_COPYINTO_VIA_TEMP_FILE = 2;
 
 	// contains the actual result table and possible a temp table
 	private List<MonetDBTable> monetDBTables = new ArrayList<MonetDBTable>();
@@ -33,13 +31,15 @@ public class CopyTable
 	private boolean create = true;
 
 	private boolean drop = false;
+	
+	private String source;
 
 	// secret view name
 	private String toName;
 
 	private String fromName;
 
-	private String schema;
+	private String schema = "sys";
 
 	private int copyMethod = COPY_METHOD_NOTSET;
 
@@ -62,6 +62,18 @@ public class CopyTable
 	
 	// this will do COPY INTO with LOCKED MODE
 	private boolean useLockedMode = false;
+	
+	private String loadDate;
+	
+	public void setLoadDate(String loadDateStr)
+	{
+		this.loadDate = loadDateStr;
+	}
+	
+	public String getLoadDate()
+	{
+		return this.loadDate;
+	}
 
 	public void setCopyMethod(int copyMethod)
 	{
@@ -102,6 +114,16 @@ public class CopyTable
 	{
 		return this.create;
 	}
+	
+	public String getSource ()
+	{
+		return source;
+	}
+	
+	public void setSource(String source)
+	{
+		this.source = source;
+	}
 
 	public String getFromName()
 	{
@@ -131,6 +153,11 @@ public class CopyTable
 	public void setSchema(String schema)
 	{
 		this.schema = schema;
+	}
+	
+	public String getTempFilePrefix ()
+	{
+		return "table_" + this.source + "_" + this.fromName;
 	}
 
 	public List<MonetDBTable> getMonetDBTables()

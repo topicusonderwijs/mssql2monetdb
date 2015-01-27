@@ -29,6 +29,8 @@ public class CopyToolConfig
 	private static final Logger LOG = Logger.getLogger(CopyToolConfig.class);
 
 	public static final int DEFAULT_BATCH_SIZE = 10000;
+	
+	public static final String DEFAULT_SOURCE_ID = "_default";
 
 	private Properties databaseProperties;
 
@@ -36,16 +38,37 @@ public class CopyToolConfig
 	
 	private String jobId;
 	
-	private String schedulerTable;
+	private boolean schedulerEnabled;
 	
-	private String schedulerColumn;
+	private int schedulerInterval;
 	
-	private boolean allowMultipleInstances = false;
+	private boolean triggerEnabled;
+	
+	private String triggerSource;
+	
+	private String triggerTable;
+	
+	private String triggerColumn;
 	
 	private File configFile;
 
+	private String tempDirectory;
+	
+	private HashMap<String, SourceDatabase> sourceDatabases = new HashMap<String, SourceDatabase>(); 
+	
 	private HashMap<String, CopyTable> tablesToCopy = new HashMap<String, CopyTable>();
 	
+	public static boolean getBooleanProperty (Properties props, String key)
+	{
+		String value = props.getProperty(key);
+		if (StringUtils.isEmpty(value))
+			return false;
+		
+		value = value.toLowerCase();
+		
+		return (value.startsWith("y") || value.equals("true"));
+	}
+		
 	public static String sha1Checksum (File file) throws NoSuchAlgorithmException, IOException
 	{
 		MessageDigest md = MessageDigest.getInstance("SHA1");
@@ -57,6 +80,8 @@ public class CopyToolConfig
 	    while ((nread = fis.read(dataBytes)) != -1) {
 	      md.update(dataBytes, 0, nread);
 	    };
+	    
+	    fis.close();
 	 
 	    byte[] mdbytes = md.digest();
 	 
@@ -69,7 +94,7 @@ public class CopyToolConfig
 	    return sb.toString();
 	}
 
-	public CopyToolConfig(String args[])
+	public CopyToolConfig(String args[]) throws ConfigException
 	{
 		PropertyConfigurator.configure("log4j.properties");
 		LOG.info("Started logging of the MSSQL2MonetDB copy tool");
@@ -95,7 +120,7 @@ public class CopyToolConfig
 			HelpFormatter formatter = new HelpFormatter();
 			formatter.printHelp("mssql2monetdb", options);
 
-			System.exit(1);
+			throw new ConfigException(e.getMessage());
 		}
 		if (cmd == null)
 		{
@@ -115,14 +140,69 @@ public class CopyToolConfig
 		{
 			LOG.error("ERROR: unable to read config file");
 			e.printStackTrace();
-			System.exit(1);
+			throw new ConfigException("Unable to read config file");
 		}
+		
+		// replace environment variable references in config
+		config = loadEnvironmentVariables(config);
 
 		this.databaseProperties = getAndValidateDatabaseProperties(config);
+		this.sourceDatabases = findSourceDatabases(config);
 		this.tablesToCopy = findTablesToCopy(config);
+		
+		findSchedulerProperties(config);
+		
+		findTriggerProperties(config);
+		
+		this.tempDirectory = findTempDirectory(config);
+		
+		// verify scheduling source
+		//checkSchedulingSource();
+	}
+	
+	private Properties loadEnvironmentVariables (Properties config)
+	{
+		for(Object key : config.keySet())
+		{
+			String value = config.getProperty(key.toString());
+			
+			// not an environment variable value?
+			if (!value.toLowerCase().startsWith("env:"))
+				continue;
+			
+			String[] split = value.split(":");
+			
+			// retrieve name of environment variable and (optional) default value
+			String envVar = split[1];
+			String defaultValue = (split.length >= 3) ? split[2] : "";
+			
+			// get value of environment variable
+			String envValue = System.getenv(envVar);
+			
+			if (StringUtils.isEmpty(envValue))
+			{
+				if (StringUtils.isEmpty(defaultValue))
+				{
+					LOG.warn("Configuration property '" + key.toString() + "' set to empty. "
+							+ "Environment variable '" + envVar + "' is empty or not set!");
+				}
+				else
+				{
+					LOG.info("Configuration property '" + key.toString() + "' set to default value '" + defaultValue + "'."
+							+ "Environment variable '" + envVar + "' is empty or not set.");
+				}
+				
+				envValue = defaultValue;
+			}
+			
+			// set new value of config property
+			config.setProperty(key.toString(), envValue);
+		}
+		
+		return config;
 	}
 
-	private Properties getAndValidateDatabaseProperties(Properties config)
+	private Properties getAndValidateDatabaseProperties(Properties config) throws ConfigException
 	{
 		boolean isMissing = false;
 		ArrayList<String> missingKeys = new ArrayList<String>();
@@ -142,22 +222,10 @@ public class CopyToolConfig
 		{
 			LOG.fatal("Missing essential config properties");
 			EmailUtil.sendMail("The following configs are missing: " + missingKeys.toString(), "Missing essential config properties in monetdb", config);
-			System.exit(1);
+			throw new ConfigException("Missing essential config properties");
 		}
 		
 		jobId = config.getProperty(CONFIG_KEYS.JOB_ID.toString());
-		
-		// check if scheduler has been specified
-		schedulerTable = config.getProperty(CONFIG_KEYS.SCHEDULER_TABLE.toString());
-		schedulerColumn = config.getProperty(CONFIG_KEYS.SCHEDULER_COLUMN.toString());
-		
-		// check if multiple instances of the same job can be running concurrently
-		String allowMultipleInstancesStr = config.getProperty(CONFIG_KEYS.ALLOW_MULTIPLE_INSTANCES.toString());
-		if (!StringUtils.isEmpty(allowMultipleInstancesStr))
-		{
-			allowMultipleInstancesStr = allowMultipleInstancesStr.toLowerCase();		
-			allowMultipleInstances = (allowMultipleInstancesStr.equals("yes") || allowMultipleInstancesStr.equals("true"));
-		}
 
 		// check if batch size has been specified
 		String batchSizeStr = config.getProperty(CONFIG_KEYS.BATCH_SIZE.toString());
@@ -174,6 +242,302 @@ public class CopyToolConfig
 		}
 
 		return config;
+	}
+	
+	private String findTempDirectory (Properties config)
+	{
+		String defaultTempDir = System.getProperty("java.io.tmpdir");
+		String tempDir = config.getProperty(CONFIG_KEYS.TEMP_DIR.toString());
+		
+		// no custom temp directory specified?
+		// then use standard temp directory
+		if (StringUtils.isEmpty(tempDir))
+			return defaultTempDir;
+		
+		// make sure directory does not end with slash
+		while(tempDir.endsWith("/"))
+		{
+			tempDir = tempDir.substring(0, tempDir.length()-1);
+		}
+		
+		
+		File dir = new File(tempDir);
+		
+		if (dir.exists() && dir.isFile())
+		{
+			LOG.error("Unable to use '" + tempDir + "' as temporary directory. Already exists as file. Using standard temp directory.");
+			return defaultTempDir;
+		}
+		
+		if (!dir.exists())
+		{
+			if (!dir.mkdir())
+			{
+				LOG.error("Unable to create temp directory '" + tempDir + "'. Using standard temp directory.");
+				return defaultTempDir;
+			}
+		}
+		
+		// check if we can write to temp directory
+		File sample = new File(tempDir, "test.txt");
+		
+		try {
+			if (!sample.createNewFile())
+			{
+				LOG.error("Unable to write to temp directory '" + tempDir + "'. Using standard temp directory.");
+				return defaultTempDir;
+			}
+			
+			sample.delete();
+		} catch (IOException e) {
+			LOG.error("Unable to write to temp directory '" + tempDir + "'. Using standard temp directory.");
+			return defaultTempDir;
+		}
+		
+		// all checks ok, so use custom temp directory
+		return tempDir;
+		
+	}
+	
+	private void findTriggerProperties (Properties config)
+	{
+		triggerEnabled = getBooleanProperty(config, CONFIG_KEYS.TRIGGER_ENABLED.toString());
+		
+		if (!triggerEnabled)
+			return;
+		
+		String source = config.getProperty(CONFIG_KEYS.TRIGGER_SOURCE.toString());
+		String table = config.getProperty(CONFIG_KEYS.TRIGGER_TABLE.toString());
+		String column = config.getProperty(CONFIG_KEYS.TRIGGER_COLUMN.toString());
+		
+		if (StringUtils.isEmpty(source))
+		{
+			if (!this.sourceDatabases.containsKey(DEFAULT_SOURCE_ID))
+			{
+				LOG.error("No trigger source defined and default source database does not exist. Trigger disabled!");
+				triggerEnabled = false;
+				return;
+			}
+			else
+			{
+				source = DEFAULT_SOURCE_ID;
+			}
+		}
+		else
+		{
+			if (!this.sourceDatabases.containsKey(source))
+			{
+				LOG.error("Defined trigger source '" + source + "' does not exist. Trigger disabled!");
+				triggerEnabled = false;
+				return;
+			}
+		}
+		
+		if (StringUtils.isEmpty(table))
+		{
+			LOG.error("Trigger table has not been set or is empty in configuration. Trigger disabled!");
+			triggerEnabled = false;
+			return;
+		}
+		
+		if (StringUtils.isEmpty(column))
+		{
+			LOG.error("Trigger column has not been set or is empty in configuration. Trigger disabled!");
+			triggerEnabled = false;
+			return;
+		}
+		
+		triggerSource = source;
+		triggerTable = table;
+		triggerColumn = column;
+		
+		LOG.info("Trigger enabled, monitoring " + source +"." + table + "." + column + " for indication of new data");
+	}
+	
+	private void findSchedulerProperties (Properties config)
+	{
+		schedulerEnabled = getBooleanProperty(config, CONFIG_KEYS.SCHEDULER_ENABLED.toString());
+		
+		if (!schedulerEnabled)
+			return;
+		
+		String intervalStr = config.getProperty(CONFIG_KEYS.SCHEDULER_INTERVAL.toString());
+		
+		if (StringUtils.isEmpty(intervalStr))
+		{
+			schedulerEnabled = false;
+			LOG.warn("Scheduler has been enabled in configuration but no interval has been specified. Disabled scheduler!");
+			return;
+		}
+		
+		intervalStr = intervalStr.toLowerCase().trim();
+		
+		// try to convert interval into seconds
+		int interval = 0;
+		try {
+			interval = Integer.parseInt(intervalStr);
+		} catch (NumberFormatException e) {
+			// okay, so not a number
+		}	
+		
+		// not a valid interval yet? try other options
+		if (interval == 0)
+		{
+			if (intervalStr.startsWith("every "))
+				intervalStr = intervalStr.substring(6);
+			
+			// example: 5 minutes => [0]: 5, [1]: minutes
+			String[] split = intervalStr.split(" ");
+			if (split.length >= 2)
+			{
+				String unit = split[1].toLowerCase();
+				try {
+					interval = Integer.parseInt(split[0]);
+					
+					if (unit.startsWith("minute"))
+						interval = interval * 60;
+					else if (unit.startsWith("hour"))
+						interval = interval * 60 * 60;
+					else if (unit.startsWith("day"))
+						interval = interval * 60 * 60 * 24;
+					else
+					{
+						LOG.warn("Unknown scheduler interval unit '" + unit + "'");
+						interval = 0;
+					}
+					
+				} catch (NumberFormatException e) {
+					LOG.warn("Unable to parse scheduler interval '" + split[0] + "'");
+				}
+			}
+		}
+		
+		// check if a valid interval has been found
+		if (interval == 0)
+		{
+			schedulerEnabled = false;
+			LOG.warn("Unknown scheduler interval '" + intervalStr + "' specified. Disabled scheduler!");
+		}
+		
+		LOG.info("Scheduler enabled, interval: " + interval + " seconds");
+		schedulerInterval = interval;
+		
+	}
+	
+	private HashMap<String, SourceDatabase> findSourceDatabases (Properties config)
+	{
+		HashMap<String, SourceDatabase> sourceDatabases = new HashMap<String, SourceDatabase>();
+		
+		for (Entry<Object, Object> entry : config.entrySet())
+		{
+			String propName = entry.getKey().toString().toLowerCase();
+			String propValue = entry.getValue().toString().trim();
+			
+			String[] split = propName.split("\\.");
+			
+			if (split[0].equals("mssql") == false)
+				continue;
+						
+			String id;
+			String key;
+			if (split.length == 3)
+			{
+				id = split[1];
+				key = split[2];
+			} 
+			else if (split.length == 2)
+			{
+				id = DEFAULT_SOURCE_ID;
+				key = split[1];
+			}
+			else
+			{
+				continue;
+			}
+
+			key = key.toLowerCase().trim();
+			
+			SourceDatabase db = sourceDatabases.get(id);
+			
+			if (db == null)
+			{
+				db = new SourceDatabase();
+				db.setId(id);
+			}
+			
+			if (key.equals("user"))
+			{
+				db.setUser(propValue);
+			}
+			else if (key.equals("password"))
+			{
+				db.setPassword(propValue);
+			}
+			else if (key.equals("server"))
+			{
+				db.setServer(propValue);
+			}
+			else if (key.equals("database"))
+			{
+				db.setDatabase(propValue);
+			}
+			else if (key.equals("instance"))
+			{
+				db.setInstance(propValue);
+			}
+			else if (key.equals("port"))
+			{
+				try 
+				{
+					int portInt = Integer.parseInt(propValue);
+					db.setPort(portInt);
+				}
+				catch (NumberFormatException e)
+				{
+					LOG.warn("Invalid port specified for MSSQL '" + id + "', must be a valid integer!");
+				}
+			}
+			
+			sourceDatabases.put(id, db);
+		}
+		
+		// verify each source database has a database and server specified
+		Iterator<Entry<String, SourceDatabase>> iter = sourceDatabases.entrySet().iterator();
+		while(iter.hasNext())
+		{
+			Entry<String, SourceDatabase> entry = iter.next();
+			
+			String id = entry.getKey();
+			SourceDatabase db = entry.getValue();
+			
+			if (StringUtils.isEmpty(db.getDatabase()))
+			{
+				LOG.error("MSSQL database with id '" + id + "' is missing the database name in the config!");
+				iter.remove();
+			}
+			
+			if (StringUtils.isEmpty(db.getServer()))
+			{
+				LOG.error("MSSQL database with id '" + id + "' is missing the server in the config!");
+				iter.remove();
+			}				
+		}
+		
+		if (sourceDatabases.size() == 0)
+		{
+			LOG.error("Configuration has specified NO source databases!");
+			EmailUtil.sendMail("Configuration has specified NO source databases!", "Configuration has specified NO source databases", config);
+		}
+		else
+		{
+			LOG.info("The following databases will be used as sources: ");
+			for (SourceDatabase db : sourceDatabases.values())
+			{
+				LOG.info("* " + db.getId() + ": " + db.getDatabase() + " (" + db.getServer() + ")");
+			}
+		}
+		
+		return sourceDatabases;
 	}
 
 	private HashMap<String, CopyTable> findTablesToCopy(Properties config)
@@ -198,6 +562,7 @@ public class CopyToolConfig
 			String key = split[2].toLowerCase();
 
 			CopyTable table = tablesToCopy.get(id);
+			
 			// if table does not exist than add new CopyTable with a MonetDBTable
 			if (table == null)
 			{
@@ -205,7 +570,11 @@ public class CopyToolConfig
 				table.getMonetDBTables().add(new MonetDBTable(table));
 			}
 
-			if (key.equals("from"))
+			if (key.equals("source"))
+			{
+				table.setSource(propValue);
+			}
+			else if (key.equals("from"))
 			{
 				table.setFromName(propValue);
 			}
@@ -261,10 +630,6 @@ public class CopyToolConfig
 				{
 					table.setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
 				}
-				else if (propValue.equals("copyintoviatempfile") || propValue.equals("copyintowithtempfile") || propValue.equals("copyintotempfile"))
-				{
-					table.setCopyMethod(CopyTable.COPY_METHOD_COPYINTO_VIA_TEMP_FILE);
-				}
 				else if (propValue.startsWith("insert"))
 				{
 					table.setCopyMethod(CopyTable.COPY_METHOD_INSERT);
@@ -307,6 +672,36 @@ public class CopyToolConfig
 					+ table.getFromName() + ")");
 				table.getCurrentTable().setName(table.getFromName());
 			}
+			
+			// if no source database has been specified then the default source
+			// is used
+			if (StringUtils.isEmpty(table.getSource()))
+			{
+				// check if default source exists
+				if (sourceDatabases.containsKey(DEFAULT_SOURCE_ID))
+				{
+					table.setSource(DEFAULT_SOURCE_ID);
+					LOG.info("Using default source database for table with id '" + id + "'");
+				}
+				else
+				{
+					LOG.error("Table with id '" + id + "' has not specified a source database and no default source exists in configuration");
+					iter.remove();
+					continue;
+				}
+			}
+			else
+			{
+				// check if source exists
+				if (!sourceDatabases.containsKey(table.getSource()))
+				{
+					LOG.error("Table with id '" + id + "' has specified a source database (" + table.getSource() + ") "
+							+ "which does not exist in configuration");
+					iter.remove();
+					continue;
+				}
+			}
+				
 
 			if (table.isCopyViaTempTable() && table.getTempTable() == null)
 			{
@@ -355,19 +750,14 @@ public class CopyToolConfig
 		this.databaseProperties = databaseProperties;
 	}
 	
-	public String getSchedulerTable ()
+	public int getSchedulerInterval ()
 	{
-		return this.schedulerTable;
+		return this.schedulerInterval;
 	}
 	
-	public String getSchedulerColumn ()
+	public boolean isSchedulerEnabled ()
 	{
-		return this.schedulerColumn;
-	}
-	
-	public boolean isSchedulingEnabled ()
-	{
-		return (!StringUtils.isEmpty(this.schedulerTable) && !StringUtils.isEmpty(this.schedulerColumn));
+		return this.schedulerEnabled;
 	}
 
 	public File getConfigFile ()
@@ -416,9 +806,34 @@ public class CopyToolConfig
 		return checksum;
 	}
 	
-	public boolean allowMultipleInstances ()
+	public HashMap<String, SourceDatabase> getSourceDatabases ()
 	{
-		return this.allowMultipleInstances;
+		return this.sourceDatabases;
+	}
+
+	public boolean isTriggerEnabled ()
+	{
+		return triggerEnabled;
+	}
+	
+	public String getTriggerSource() 
+	{
+		return triggerSource;
+	}
+
+	public String getTriggerTable() 
+	{
+		return triggerTable;
+	}
+
+	public String getTriggerColumn() 
+	{
+		return triggerColumn;
+	}
+	
+	public String getTempDirectory ()
+	{
+		return tempDirectory;
 	}
 
 }

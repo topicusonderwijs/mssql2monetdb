@@ -1,40 +1,25 @@
-# indicates how many records should be insert at a time into MonetDB
-batch.size = 10000
-
-# Scheduling options
-# With this the tool will check this table/column in SQL server and determine
-# if there have been any changes since the last run
-#
-# scheduler.table = updated
-# scheduler.column = last_updatetime
-
-mssql.user = dbuser
-mssql.password = dbpassword
-mssql.server = localhost
-mssql.database = my_db
-# optional instance name
-# mssql.instance = instance_name
-
+# target MonetDB Database:
 monetdb.user = monetdb
-monetdb.password = monetdb
+monetdb.password = ENV:MONETDB_PASSWORD:monetdb
 monetdb.server = localhost
 monetdb.database = my_monetdb
 
+# source MS SQL Server database(s):
+# multiple databases can be specified, each under their own sub-key
+mssql.db1.user = dbuser
+mssql.db1.password = dbpassword
+mssql.db1.server = localhost
+mssql.db1.database = my_db
+# optional instance name
+# mssql.db1.instance = instance_name
+
 # copy a table
+table.example.source = db1
 table.example.from = example_table
 table.example.to = example_table_new
 table.example.schema = sys
 table.example.create = true
 table.example.truncate = true
-
-# Mail settings
-monetdb.mail.sendmail=true
-monetdb.mail.to=my.name@something.com
-monetdb.mail.from=from@someone.com
-monetdb.mail.server=1.1.1.1
-monetdb.mail.port=8888
-monetdb.mail.username=
-monetdb.mail.password=
 
 # use tmp_tables to copy the data to so we can recreate the 
 # to-table for faster data transfer to the end table which 
@@ -49,5 +34,36 @@ table.example.tempTablePrefix = tmp_
 # resulting in almost no down-time of your database table
 # prefixes can be defined if you want custom naming
 table.example.useFastViewSwitching = false
-table.example.currentTablePrefix = current_
-table.example.backupTablePrefix = backup_
+
+# Mail settings
+monetdb.mail.sendmail=true
+monetdb.mail.to=my.name@something.com
+monetdb.mail.from=from@someone.com
+monetdb.mail.server=1.1.1.1
+monetdb.mail.port=8888
+monetdb.mail.username=
+monetdb.mail.password=
+
+# specifies a custom temp directory instead of the default system temp directory
+# temp.directory = /home/me/temp
+
+# indicates how many records should be insert at a time into MonetDB
+# only used when using INSERT method to insert new data. 
+batch.size = 10000
+
+# Scheduling options
+# Enabling the scheduler will run the tool indefinitely and run the copy job
+# every X minutes/hours/days. Very useful in combination with the trigger options
+#
+# scheduler.enabled = true
+# scheduler.interval = every 5 minutes
+
+# Trigger options
+# With this the tool will check this table/column in SQL server and determine
+# if there have been any changes since the last run. The copy job will only be executed
+# if there is new data in the trigger column.
+#
+# trigger.enabled = true
+# trigger.source = db1
+# trigger.table = updated
+# trigger.column = last_updatetime
