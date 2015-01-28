@@ -4,6 +4,7 @@
 .metadata/
 target/
 logs/
+docker/*.jar
 
 *.properties
 
