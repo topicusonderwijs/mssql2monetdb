@@ -10,7 +10,7 @@ ENTRYPOINT ["/docker-entrypoint.sh"]
 
 # Add MSSQL2MonetDB jar file
 ENV TOOL_VERSION 0.5
-COPY mssql2monetdb-$TOOL_VERSION-jar-with-dependencies.jar /mssql2monetdb-$TOOL_VERSION.jar
+ADD https://github.com/topicus-ini/mssql2monetdb/releases/download/$TOOL_VERSION/mssql2monetdb-$TOOL_VERSION-jar-with-dependencies.jar /mssql2monetdb-$TOOL_VERSION.jar
 
 # Copy logging config file
 COPY log4j.properties /log4j.properties
