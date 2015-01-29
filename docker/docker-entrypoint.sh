@@ -1,17 +1,22 @@
 #!/bin/bash
 set -e
 
-CONFIG="$1"
-
-if [ "$CONFIG" == "" ]; then
-	echo "ERROR: config file must be specified as command argument to Docker"
+if [ "$1" == "" ]; then
+	echo "ERROR: at leat 1 config file must be specified as command argument to Docker"
 	exit 1
 fi
 
-if [ ! -f "$CONFIG" ]; then
-	echo "ERROR: specified config file '$CONFIG' is not available in container" >&2
-	exit 1
-fi
+for CONFIG in "$@"
+do
+    if [ ! -f "$CONFIG" ]; then
+		echo "WARN: skipping '$CONFIG', not available in container" >&2
+	else
+		# run tool with config
+		echo "Running MSSQL2MonetDB tool with config file: $CONFIG"
+		echo "========================="
+		java -jar mssql2monetdb-$TOOL_VERSION.jar -c "$CONFIG"
+		echo "========================="
+	fi
+done
 
-# run tool with config
-java -jar mssql2monetdb-$TOOL_VERSION.jar -c "$CONFIG"
+echo "Finished!"
