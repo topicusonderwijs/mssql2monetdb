@@ -11,6 +11,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
 import java.io.Writer;
@@ -599,7 +600,8 @@ public class CopyTool
 		File temp = new File(tmpDir, tmpFilePrefix + "_data.csv");		
 		LOG.info("Writing data to temp file: " + temp.getAbsolutePath());
 		
-		BufferedWriter bw = new BufferedWriter(new FileWriter(temp));
+		BufferedWriter bw = new BufferedWriter
+			    (new OutputStreamWriter(new FileOutputStream(temp), "UTF-8"));
 
 		long startTime = System.currentTimeMillis();
 		long insertCount = 0;
