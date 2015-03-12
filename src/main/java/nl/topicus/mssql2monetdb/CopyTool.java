@@ -146,6 +146,9 @@ public class CopyTool
 	{
 		HashMap<String, CopyTable> tablesToCopy = config.getTablesToCopy();
 		
+		boolean switchOnly = config.isSwitchOnly();
+		boolean noSwitch = config.hasNoSwitch();
+		
 		// no tables to copy?
 		if (tablesToCopy.size() == 0)
 		{
@@ -157,75 +160,80 @@ public class CopyTool
 		// check if trigger is enabled and if so, if there is any new data
 		boolean anyErrors = false;
 		
-		if (config.isTriggerEnabled() && !checkForNewData())
-		{
-			LOG.info("No indication of new data from trigger source '" + config.getTriggerTable() + "." + config.getTriggerColumn() + "'");
-			CopyToolConnectionManager.getInstance().closeConnections();
-			return;
-		}
-		
-		// verify all MSSQL tables have data
-		if (!MssqlUtil.allMSSQLTablesHaveData(tablesToCopy))
-		{
-			LOG.warn("Not all tables have data");
-			CopyToolConnectionManager.getInstance().closeConnections();
-			return;
-		}
-		
-		// verify MonetDB database is working by opening connection
-		try {
-			CopyToolConnectionManager.getInstance().openMonetDbConnection();
-		} catch (SQLException e) {
-			LOG.error("Unable to open connection to target MonetDB database: " + e.getMessage(), e);
-			CopyToolConnectionManager.getInstance().closeConnections();
-			return;
-		}
-		
-		LOG.info("STARTING PHASE 1: copying data from MS SQL source databases to local disk");
-		
-		// phase 1: copy data from MS SQL sources to local disk
-		try {
-			for(CopyTable table : tablesToCopy.values())
+		if(!switchOnly){
+			
+			if (config.isTriggerEnabled() && !checkForNewData())
 			{
-				copyData(table);
+				LOG.info("No indication of new data from trigger source '" + config.getTriggerTable() + "." + config.getTriggerColumn() + "'");
+				CopyToolConnectionManager.getInstance().closeConnections();
+				return;
 			}
-		} catch (Exception e) {
-			anyErrors = true;
-			LOG.error("Unable to copy data to disk", e);
-			EmailUtil.sendMail("Unable to copy data with the following error: "+ e.getStackTrace(), "Unable to copy data from table in monetdb", config.getDatabaseProperties());
-		}
-		
-		LOG.info("PHASE 1 FINISHED: all data copied from MS SQL source databases to local disk");
-		
-		LOG.info("STARTING PHASE 2: loading data into target MonetDB database");
-		
-		// get a SQL-friendly representation of the current date/time of the load
-		// used for the fast view switching tables
-		DateFormat dateFormat = new SimpleDateFormat("yyyy_MM_dd_HH_mm_ss");
-		Calendar cal = Calendar.getInstance();
-		String loadDateStr = dateFormat.format(cal.getTime());
-		
-		// phase 2: load data from disk into MonetDB
-		try {
-			for (CopyTable table : tablesToCopy.values())
+			
+			// verify all MSSQL tables have data
+			if (!MssqlUtil.allMSSQLTablesHaveData(tablesToCopy))
 			{
-				// pass load date to table
-				table.setLoadDate(loadDateStr);
-								
-				// load new data into MonetDB
-				loadData(table);
+				LOG.warn("Not all tables have data");
+				CopyToolConnectionManager.getInstance().closeConnections();
+				return;
 			}
-		} catch (Exception e) {
-			anyErrors = true;
-			LOG.error("Unable to load data into MonetDB", e);
-			EmailUtil.sendMail("Unable to load data with the following error: "+ e.getStackTrace(), "Unable to load data table into monetdb", config.getDatabaseProperties());
+			
+			// verify MonetDB database is working by opening connection
+			try {
+				CopyToolConnectionManager.getInstance().openMonetDbConnection();
+			} catch (SQLException e) {
+				LOG.error("Unable to open connection to target MonetDB database: " + e.getMessage(), e);
+				CopyToolConnectionManager.getInstance().closeConnections();
+				return;
+			}
+			
+			LOG.info("STARTING PHASE 1: copying data from MS SQL source databases to local disk");
+			
+			// phase 1: copy data from MS SQL sources to local disk
+			try {
+				for(CopyTable table : tablesToCopy.values())
+				{
+					copyData(table);
+				}
+			} catch (Exception e) {
+				anyErrors = true;
+				LOG.error("Unable to copy data to disk", e);
+				EmailUtil.sendMail("Unable to copy data with the following error: "+ e.getStackTrace(), "Unable to copy data from table in monetdb", config.getDatabaseProperties());
+			}
+			
+			LOG.info("PHASE 1 FINISHED: all data copied from MS SQL source databases to local disk");
+			
+			LOG.info("STARTING PHASE 2: loading data into target MonetDB database");
+			
+			// get a SQL-friendly representation of the current date/time of the load
+			// used for the fast view switching tables
+			DateFormat dateFormat = new SimpleDateFormat("yyyy_MM_dd_HH_mm_ss");
+			Calendar cal = Calendar.getInstance();
+			String loadDateStr = dateFormat.format(cal.getTime());
+			
+			// phase 2: load data from disk into MonetDB
+			try {
+				for (CopyTable table : tablesToCopy.values())
+				{
+					// pass load date to table
+					table.setLoadDate(loadDateStr);
+									
+					// load new data into MonetDB
+					loadData(table);
+				}
+			} catch (Exception e) {
+				anyErrors = true;
+				LOG.error("Unable to load data into MonetDB", e);
+				EmailUtil.sendMail("Unable to load data with the following error: "+ e.getStackTrace(), "Unable to load data table into monetdb", config.getDatabaseProperties());
+			}
+			
+			LOG.info("PHASE 2 FINISHED: all data loaded into target MonetDB database");
+		}
+		else {
+			LOG.info("Switch-Only requested with flag. Therefore, PHASE 1 and 2 skipped");
 		}
 		
-		LOG.info("PAHSE 2 FINISHED: all data loaded into target MonetDB database");
-		
-		//switching is wanted if the no-switch-flag is not set 
-		boolean switching = !config.hasNoSwitch();
-		if(switching){
+		//if switch-ONly flag set or when the no-switch-Flag is NOT set, than switching
+		if(switchOnly || !noSwitch){
 			
 			LOG.info("STARTING PHASE 3: switching all view-based tables to new data");
 			
