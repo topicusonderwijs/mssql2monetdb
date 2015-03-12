@@ -223,7 +223,9 @@ public class CopyTool
 		
 		LOG.info("PAHSE 2 FINISHED: all data loaded into target MonetDB database");
 		
-		if(config.hasSwitchFlag()){
+		//switching is wanted if the no-switch-flag is not set 
+		boolean switching = !config.hasNoSwitch();
+		if(switching){
 			
 			LOG.info("STARTING PHASE 3: switching all view-based tables to new data");
 			
@@ -259,30 +261,31 @@ public class CopyTool
 			}
 			
 			LOG.info("PHASE 3 FINISHED: all views have been switched");
+		
+		
+			LOG.info("STARTING PHASE 4: cleanup of data from disk and database");
+			
+			// phase 4: remove temp data from disk and target database
+			for (CopyTable copyTable : tablesToCopy.values())
+			{
+				// remove temp data from disk
+				removeTempData(copyTable);
+				
+				// remove old versions of view-based tables
+				// that are no longer needed
+				try {
+					dropOldTables(copyTable);
+				} catch (SQLException e) {
+					LOG.warn("Got SQLException when trying to drop older versions of table '" + copyTable.getToName() + "': " + e.getMessage(), e);
+				}
+			}
+			
+			LOG.info("PHASE 4 FINISHED: all data removed from disk and database");
+
 		}
 		else{
-			LOG.info("PHASE 3 skipped because switch-flag set it off");
+			LOG.info("PHASE 3 (switching) and PHASE 4 (cleanup) skipped because no-switch-flag setting");
 		}
-		
-		LOG.info("STARTING PHASE 4: cleanup of data from disk and database");
-		
-		// phase 4: remove temp data from disk and target database
-		for (CopyTable copyTable : tablesToCopy.values())
-		{
-			// remove temp data from disk
-			removeTempData(copyTable);
-			
-			// remove old versions of view-based tables
-			// that are no longer needed
-			try {
-				dropOldTables(copyTable);
-			} catch (SQLException e) {
-				LOG.warn("Got SQLException when trying to drop older versions of table '" + copyTable.getToName() + "': " + e.getMessage(), e);
-			}
-		}
-		
-		LOG.info("PHASE 4 FINISHED: all data removed from disk and database");
-
 		// write out info for trigger
 		if (config.isTriggerEnabled() && !anyErrors)
 		{
