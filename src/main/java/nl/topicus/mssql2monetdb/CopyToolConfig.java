@@ -54,6 +54,8 @@ public class CopyToolConfig
 
 	private String tempDirectory;
 	
+	private boolean switchFlag;
+
 	private HashMap<String, SourceDatabase> sourceDatabases = new HashMap<String, SourceDatabase>(); 
 	
 	private HashMap<String, CopyTable> tablesToCopy = new HashMap<String, CopyTable>();
@@ -106,6 +108,12 @@ public class CopyToolConfig
 		OptionBuilder.withDescription("Specify the configuration properties file");
 		OptionBuilder.withLongOpt("config");
 		options.addOption(OptionBuilder.create("c"));
+		
+		OptionBuilder.hasArg(true);
+		OptionBuilder.isRequired(true);
+		OptionBuilder.withDescription("Specify if views will be switched or not");
+		OptionBuilder.withLongOpt("switch");
+		options.addOption(OptionBuilder.create("s"));
 
 		CommandLineParser parser = new BasicParser();
 		CommandLine cmd = null;
@@ -129,6 +137,7 @@ public class CopyToolConfig
 		}
 
 		configFile = new File(cmd.getOptionValue("config"));
+		
 		LOG.info("Using config file: " + configFile.getAbsolutePath());
 
 		Properties config = new Properties();
@@ -155,6 +164,11 @@ public class CopyToolConfig
 		findTriggerProperties(config);
 		
 		this.tempDirectory = findTempDirectory(config);
+		
+
+		this.switchFlag = Boolean.valueOf(cmd.getOptionValue("switch"));
+		
+		LOG.info("Switch-flag set to: " + switchFlag);
 		
 		// verify scheduling source
 		//checkSchedulingSource();
@@ -834,6 +848,15 @@ public class CopyToolConfig
 	public String getTempDirectory ()
 	{
 		return tempDirectory;
+	}
+	
+
+	public boolean hasSwitchFlag() {
+		return switchFlag;
+	}
+
+	public void setSwitchFlag(boolean switchFlag) {
+		this.switchFlag = switchFlag;
 	}
 
 }

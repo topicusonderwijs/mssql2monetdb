@@ -223,40 +223,46 @@ public class CopyTool
 		
 		LOG.info("PAHSE 2 FINISHED: all data loaded into target MonetDB database");
 		
-		LOG.info("STARTING PHASE 3: switching all view-based tables to new data");
-		
-		// we need another loop through the tables for temp table copying and view
-		// switching. We do this after the copy actions to reduce down-time
-		
-		// phase 3: switch views (for view-based tables)
-		for (CopyTable copyTable : tablesToCopy.values())
-		{
-			// if there are any temp table copies configured, then copy the
-			// temp tables to result tables. We do this after the rest is done to
-			// reduce down-time
-			if (copyTable.isCopyViaTempTable())
-			{
-				copyTempTableToCurrentTable(copyTable);
-			}
+		if(config.hasSwitchFlag()){
 			
-			try
+			LOG.info("STARTING PHASE 3: switching all view-based tables to new data");
+			
+			// we need another loop through the tables for temp table copying and view
+			// switching. We do this after the copy actions to reduce down-time
+			
+			// phase 3: switch views (for view-based tables)
+			for (CopyTable copyTable : tablesToCopy.values())
 			{
-				// set view to current table because it contains the new data now
-				if (copyTable.isUseFastViewSwitching())
+				// if there are any temp table copies configured, then copy the
+				// temp tables to result tables. We do this after the rest is done to
+				// reduce down-time
+				if (copyTable.isCopyViaTempTable())
 				{
-					MonetDBUtil.dropAndRecreateViewForTable(copyTable.getSchema(),
-						copyTable.getToName(), copyTable.getCurrentTable());
+					copyTempTableToCurrentTable(copyTable);
+				}
+				
+				try
+				{
+					// set view to current table because it contains the new data now
+					if (copyTable.isUseFastViewSwitching())
+					{
+						MonetDBUtil.dropAndRecreateViewForTable(copyTable.getSchema(),
+							copyTable.getToName(), copyTable.getCurrentTable());
+					}
+				}
+				catch (SQLException e)
+				{
+					anyErrors = true;
+					LOG.error("Unable to create view '" + copyTable.getToViewSql() + "'", e);
+					EmailUtil.sendMail("Unable to create view" + copyTable.getToViewSql() + " with the following error: "+ e.toString(), "Unable to create view in monetdb", config.getDatabaseProperties());
 				}
 			}
-			catch (SQLException e)
-			{
-				anyErrors = true;
-				LOG.error("Unable to create view '" + copyTable.getToViewSql() + "'", e);
-				EmailUtil.sendMail("Unable to create view" + copyTable.getToViewSql() + " with the following error: "+ e.toString(), "Unable to create view in monetdb", config.getDatabaseProperties());
-			}
+			
+			LOG.info("PHASE 3 FINISHED: all views have been switched");
 		}
-		
-		LOG.info("PHASE 3 FINISHED: all views have been switched");
+		else{
+			LOG.info("PHASE 3 skipped because switch-flag set it off");
+		}
 		
 		LOG.info("STARTING PHASE 4: cleanup of data from disk and database");
 		
