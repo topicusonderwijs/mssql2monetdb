@@ -54,6 +54,10 @@ public class CopyToolConfig
 
 	private String tempDirectory;
 	
+	private boolean noSwitch;
+	
+	private boolean switchOnly;
+
 	private HashMap<String, SourceDatabase> sourceDatabases = new HashMap<String, SourceDatabase>(); 
 	
 	private HashMap<String, CopyTable> tablesToCopy = new HashMap<String, CopyTable>();
@@ -106,6 +110,19 @@ public class CopyToolConfig
 		OptionBuilder.withDescription("Specify the configuration properties file");
 		OptionBuilder.withLongOpt("config");
 		options.addOption(OptionBuilder.create("c"));
+		
+		OptionBuilder.hasArg(false);
+		OptionBuilder.isRequired(false);
+		OptionBuilder.withDescription("Specify if views will be switched or not");
+		OptionBuilder.withLongOpt("no-switch");
+		options.addOption(OptionBuilder.create("ns"));
+		
+		OptionBuilder.hasArg(false);
+		OptionBuilder.isRequired(false);
+		OptionBuilder.withDescription("Specify if views will be switched or not");
+		OptionBuilder.withLongOpt("switch-only");
+		options.addOption(OptionBuilder.create("so"));
+
 
 		CommandLineParser parser = new BasicParser();
 		CommandLine cmd = null;
@@ -129,6 +146,7 @@ public class CopyToolConfig
 		}
 
 		configFile = new File(cmd.getOptionValue("config"));
+		
 		LOG.info("Using config file: " + configFile.getAbsolutePath());
 
 		Properties config = new Properties();
@@ -155,6 +173,12 @@ public class CopyToolConfig
 		findTriggerProperties(config);
 		
 		this.tempDirectory = findTempDirectory(config);
+
+		this.noSwitch = cmd.hasOption("no-switch");
+		LOG.info("No-Switch-flag set to: " + noSwitch);
+
+		this.switchOnly = cmd.hasOption("switch-only");
+		LOG.info("Switch-Only-flag set to: " + switchOnly);
 		
 		// verify scheduling source
 		//checkSchedulingSource();
@@ -834,6 +858,23 @@ public class CopyToolConfig
 	public String getTempDirectory ()
 	{
 		return tempDirectory;
+	}
+	
+
+	public boolean hasNoSwitch() {
+		return noSwitch;
+	}
+
+	public void setNoSwitch(boolean noSwitch) {
+		this.noSwitch = noSwitch;
+	}
+
+	public boolean isSwitchOnly() {
+		return switchOnly;
+	}
+
+	public void setSwitchOnly(boolean switchOnly) {
+		this.switchOnly = switchOnly;
 	}
 
 }
