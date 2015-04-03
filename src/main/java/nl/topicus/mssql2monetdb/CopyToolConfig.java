@@ -631,14 +631,6 @@ public class CopyToolConfig
 			{
 				table.setTempTablePrefix(propValue);
 			}
-			else if (key.equals("backuptableprefix"))
-			{
-				table.setBackupTablePrefix(propValue);
-			}
-			else if (key.equals("currenttableprefix"))
-			{
-				table.setCurrentTablePrefix(propValue);
-			}
 			else if (key.equals("usefastviewswitching"))
 			{
 				table.setUseFastViewSwitching(boolValue);

@@ -27,6 +27,8 @@ import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.HashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import nl.cwi.monetdb.mcl.io.BufferedMCLReader;
 import nl.cwi.monetdb.mcl.io.BufferedMCLWriter;
@@ -53,6 +55,8 @@ public class CopyTool
 	private Object lastRunValue;
 	
 	private int lastRunColType;
+	
+	private Pattern versionPattern = Pattern.compile("[0-9]{4}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2}$");
 
 	/**
 	 * @param args
@@ -82,9 +86,7 @@ public class CopyTool
 			System.exit(1);
 		}
 	}
-	
-	
-	
+
 	public void run(CopyToolConfig config) throws CopyToolException
 	{
 		if (config == null)
@@ -231,15 +233,29 @@ public class CopyTool
 		else {
 			LOG.info("Switch-Only requested with flag. Therefore, PHASE 1 and 2 skipped");
 		}
-		
+					
 		//if switch-ONly flag set or when the no-switch-Flag is NOT set, than switching
 		if(switchOnly || !noSwitch){
 			
 			LOG.info("STARTING PHASE 3: switching all view-based tables to new data");
 			
+			// when switching only we need to find the latest load date for each table
+			if (switchOnly)
+			{
+				for(CopyTable copyTable : tablesToCopy.values())
+				{
+					// find latest version of table
+					try {
+						String newestVersion = findNewestTable(copyTable);
+						copyTable.setLoadDate(newestVersion);
+					} catch (SQLException e) {
+						LOG.warn("Unable to find newest version of table '" + copyTable.getToName() + "'");
+					}					
+				}
+			}
+			
 			// we need another loop through the tables for temp table copying and view
 			// switching. We do this after the copy actions to reduce down-time
-			
 			// phase 3: switch views (for view-based tables)
 			for (CopyTable copyTable : tablesToCopy.values())
 			{
@@ -256,8 +272,15 @@ public class CopyTool
 					// set view to current table because it contains the new data now
 					if (copyTable.isUseFastViewSwitching())
 					{
-						MonetDBUtil.dropAndRecreateViewForTable(copyTable.getSchema(),
-							copyTable.getToName(), copyTable.getCurrentTable());
+						if(StringUtils.isEmpty(copyTable.getLoadDate()))
+						{
+							LOG.error("Unable to switch view of table '" + copyTable.getToName() + "' due to missing load date");
+						}
+						else
+						{
+							MonetDBUtil.dropAndRecreateViewForTable(copyTable.getSchema(),
+									copyTable.getToName(), copyTable.getCurrentTable());
+						}
 					}
 				}
 				catch (SQLException e)
@@ -267,7 +290,6 @@ public class CopyTool
 					EmailUtil.sendMail("Unable to create view" + copyTable.getToViewSql() + " with the following error: "+ e.toString(), "Unable to create view in monetdb", config.getDatabaseProperties());
 				}
 			}
-			
 			LOG.info("PHASE 3 FINISHED: all views have been switched");
 		
 		
@@ -501,6 +523,42 @@ public class CopyTool
 			return false;
 		}
 		
+	}
+	
+	/**
+	 * Find newest version of tables
+	 * @throws SQLException 
+	 */
+	private String findNewestTable(CopyTable table) throws SQLException
+	{		
+		Statement q =
+			CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
+		
+		ResultSet result =
+			q.executeQuery("SELECT name FROM sys.tables WHERE name LIKE '" + table.getToName()
+				+ "_20%_%' AND name <> '" + table.getToName() + "' "
+				+ "AND schema_id = (SELECT id from sys.schemas WHERE name = '" + table.getSchema()
+				+ "') AND query IS NULL ORDER BY name DESC");
+		
+		String version = "";
+		
+		if (result.next())
+		{
+			String name = result.getString("name");
+			Matcher matcher = versionPattern.matcher(name);
+			
+			if (matcher.find())
+			{
+				version = matcher.group();
+			}
+			
+			
+		}
+		
+		result.close();
+		q.close();
+		
+		return version;
 	}
 	
 	/**
