@@ -1,5 +1,5 @@
 # Use official Java base image
-FROM java:7-jre
+FROM java:8-jre
 MAINTAINER Dennis Pallett, dennis.pallett@topicus.nl
 
 # Make the log directory a volume so it's available to other containers
@@ -9,7 +9,7 @@ VOLUME ["/logs"]
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
 # Add MSSQL2MonetDB jar file
-ENV TOOL_VERSION 0.7
+ENV TOOL_VERSION 0.8
 ADD https://github.com/topicus-ini/mssql2monetdb/releases/download/$TOOL_VERSION/mssql2monetdb-$TOOL_VERSION-jar-with-dependencies.jar /mssql2monetdb-$TOOL_VERSION.jar
 
 # Copy logging config file
