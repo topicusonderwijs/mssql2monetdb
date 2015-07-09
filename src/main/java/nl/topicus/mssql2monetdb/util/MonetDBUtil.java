@@ -475,4 +475,31 @@ public class MonetDBUtil
 				+ "' does not exist");
 		}
 	}
+	
+	/** Check whether a table is empty for skipping empty table purpose **/
+	public static boolean isTableEmpty(String schema, String name) throws SQLException{
+		try{
+			Statement q =
+					CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
+			ResultSet result =
+					q.executeQuery("SELECT * FROM sys.tables WHERE name = '" + name
+							+ "' AND schema_id = (SELECT id FROM sys.schemas WHERE name = '" + schema
+							+ "')");
+			int rowCount = 0;
+			while( result.next() ){
+				rowCount++;
+			}
+			
+			if ( rowCount == 0 ){
+				return true;
+			}
+		}catch(SQLException e){
+			LOG.error("Error while checking if table is empty",
+					e);
+			throw e;
+		}
+		return false;
+	}
+	
+
 }
