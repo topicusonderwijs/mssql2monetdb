@@ -50,6 +50,8 @@ public class CopyToolConfig
 	
 	private String triggerColumn;
 	
+	private String triggerDirectory;
+	
 	private File configFile;
 
 	private String tempDirectory;
@@ -333,6 +335,7 @@ public class CopyToolConfig
 		String source = config.getProperty(CONFIG_KEYS.TRIGGER_SOURCE.toString());
 		String table = config.getProperty(CONFIG_KEYS.TRIGGER_TABLE.toString());
 		String column = config.getProperty(CONFIG_KEYS.TRIGGER_COLUMN.toString());
+		String triggerDir = config.getProperty(CONFIG_KEYS.TRIGGER_DIR.toString());
 		
 		if (StringUtils.isEmpty(source))
 		{
@@ -371,9 +374,59 @@ public class CopyToolConfig
 			return;
 		}
 		
+		// no custom directory specified?
+		// then use home directory
+		if (StringUtils.isEmpty(triggerDir))
+			triggerDir = System.getProperty("user.dir");
+		
+		// make sure directory does not end with slash
+		while(triggerDir.endsWith("/"))
+		{
+			triggerDir = triggerDir.substring(0, triggerDir.length()-1);
+		}
+		
+		
+		File dir = new File(triggerDir);
+		
+		if (dir.exists() && dir.isFile())
+		{
+			LOG.error("Unable to use '" + triggerDir + "' as directory for trigger. Already exists as file. Trigger disabled!");
+			triggerEnabled = false;
+			return;
+		}
+		
+		if (!dir.exists())
+		{
+			if (!dir.mkdir())
+			{
+				LOG.error("Unable to create directory '" + triggerDir + "'. Trigger disabled!.");
+				triggerEnabled = false;
+				return;
+			}
+		}
+		
+		// check if we can write to trigger directory
+		File sample = new File(triggerDir, "test.txt");
+		
+		try {
+			if (!sample.createNewFile())
+			{
+				LOG.error("Unable to write to trigger directory '" + triggerDir + "'.Trigger disabled!");
+				triggerEnabled = false;
+				return;
+			}
+			
+			sample.delete();
+		} catch (IOException e) {
+			LOG.error("Unable to write to trigger directory '" + triggerDir + "'. Trigger disabled!");
+			 triggerEnabled = false;
+			return;
+		}
+		
 		triggerSource = source;
 		triggerTable = table;
 		triggerColumn = column;
+		triggerDirectory = triggerDir;
 		
 		LOG.info("Trigger enabled, monitoring " + source +"." + table + "." + column + " for indication of new data");
 	}
@@ -845,6 +898,11 @@ public class CopyToolConfig
 	public String getTriggerColumn() 
 	{
 		return triggerColumn;
+	}
+	
+	public String getTriggerDirectory() 
+	{
+		return triggerDirectory;
 	}
 	
 	public String getTempDirectory ()

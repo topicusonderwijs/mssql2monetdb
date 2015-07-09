@@ -9,6 +9,7 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStreamWriter;
@@ -221,6 +222,9 @@ public class CopyTool
 									
 					// load new data into MonetDB
 					loadData(table);
+					
+					// remove temp data from disk
+					removeTempData(table);
 				}
 			} catch (Exception e) {
 				anyErrors = true;
@@ -297,10 +301,7 @@ public class CopyTool
 			
 			// phase 4: remove temp data from disk and target database
 			for (CopyTable copyTable : tablesToCopy.values())
-			{
-				// remove temp data from disk
-				removeTempData(copyTable);
-				
+			{				
 				// remove old versions of view-based tables
 				// that are no longer needed
 				try {
@@ -326,19 +327,15 @@ public class CopyTool
 	
 		LOG.info("Finished!");
 	}
-	
-	public File getUserDir ()
-	{
-		return new File(System.getProperty("user.dir"));
-	}
-	
+		
 	/**
 	 * Returns the file that stores the lastrun info
 	 * @return
 	 */
 	public File getLastRunFile () 
 	{
-		return new File(getUserDir().getAbsolutePath() + "/" + config.getJobId() + "_lastrun.txt");
+		LOG.info("Reading lastrun file located in directory '" + config.getTriggerDirectory() + "'");
+		return new File(config.getTriggerDirectory() + "/" + config.getJobId() + "_lastrun.txt");
 	}
 	
 	/**
@@ -986,7 +983,12 @@ public class CopyTool
 		long startTime = System.currentTimeMillis();
 		long insertCount = 0;
 		
-		BufferedReader br = new BufferedReader(new FileReader(dataFile));
+		BufferedReader br = new BufferedReader(
+			new InputStreamReader(
+				new FileInputStream(dataFile), 
+				"UTF8"
+			)
+		);
 
 		String line;
 		while((line = br.readLine()) != null)
@@ -1010,12 +1012,6 @@ public class CopyTool
 		LOG.info("Finalising COPY INTO... this may take a while!");
 
 		out.writeLine("");
-
-		error = in.waitForPrompt();
-		if (error != null)
-			throw new Exception(error);
-
-		out.writeLine(""); // server wants more, we're going to tell it, this is it
 
 		error = in.waitForPrompt();
 		if (error != null)
