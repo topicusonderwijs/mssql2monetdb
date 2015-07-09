@@ -20,6 +20,7 @@ public enum CONFIG_KEYS
 	TRIGGER_SOURCE("trigger.source", false),
 	TRIGGER_TABLE("trigger.table", false),
 	TRIGGER_COLUMN("trigger.column", false),
+	TRIGGER_DIR("trigger.directory", false),
 	BATCH_SIZE("batch.size", false),
 	TEMP_DIR("temp.directory", false);
 	
