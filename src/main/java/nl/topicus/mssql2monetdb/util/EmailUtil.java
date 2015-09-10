@@ -22,6 +22,14 @@ public class EmailUtil
 	/**
 	 * Sends an email with a given message en subject. The dataproperties provide the email settings en therefore have to be given to teh function.
 	 */
+	public static void sendMail(Exception e, Properties databaseProperties)
+	{
+		EmailUtil.sendMail(e.getMessage() + "\n\n" + e.getStackTrace(), "Error in MSSQL2MonetDB job", databaseProperties);
+	}
+	
+	/**
+	 * Sends an email with a given message en subject. The dataproperties provide the email settings en therefore have to be given to teh function.
+	 */
 	public static void sendMail(String message, String subject, Properties databaseProperties)
 	{
 		final String username = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_MAIL_USERNAME.toString()); 
