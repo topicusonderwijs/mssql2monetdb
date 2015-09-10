@@ -13,6 +13,7 @@ import javax.mail.internet.MimeMessage;
 import nl.topicus.mssql2monetdb.CONFIG_KEYS;
 
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.log4j.Logger;
 
 public class EmailUtil
@@ -24,7 +25,15 @@ public class EmailUtil
 	 */
 	public static void sendMail(Exception e, Properties databaseProperties)
 	{
-		EmailUtil.sendMail(e.getMessage() + "\n\n" + e.getStackTrace(), "Error in MSSQL2MonetDB job", databaseProperties);
+		EmailUtil.sendMail(e.getMessage() + "\n\n" + ExceptionUtils.getStackTrace(e), databaseProperties);
+	}
+	
+	/**
+	 * Sends an email with a given message en subject. The dataproperties provide the email settings en therefore have to be given to teh function.
+	 */
+	public static void sendMail(String message, Properties databaseProperties)
+	{
+		sendMail(message, databaseProperties.getProperty(CONFIG_KEYS.MAIL_SUBJECT.toString()), databaseProperties);
 	}
 	
 	/**
@@ -32,12 +41,15 @@ public class EmailUtil
 	 */
 	public static void sendMail(String message, String subject, Properties databaseProperties)
 	{
-		final String username = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_MAIL_USERNAME.toString()); 
-		final String password = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_MAIL_PASSWORD.toString());
-		final String from = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_MAIL_FOM.toString());
-		final String to = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_MAIL_TO.toString());
-		final String server = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_MAIL_SERVER.toString());
-		final String port = databaseProperties.getProperty(CONFIG_KEYS.MONETDB_MAIL_PORT.toString());
+		final String username = databaseProperties.getProperty(CONFIG_KEYS.MAIL_USERNAME.toString()); 
+		final String password = databaseProperties.getProperty(CONFIG_KEYS.MAIL_PASSWORD.toString());
+		final String from = databaseProperties.getProperty(CONFIG_KEYS.MAIL_FROM.toString());
+		final String to = databaseProperties.getProperty(CONFIG_KEYS.MAIL_TO.toString());
+		final String server = databaseProperties.getProperty(CONFIG_KEYS.MAIL_SERVER.toString());
+		final String port = databaseProperties.getProperty(CONFIG_KEYS.MAIL_PORT.toString());
+		
+		if (StringUtils.isEmpty(subject))
+			subject = "Error in MSSQL2MonetDB job";
 		
 		if (StringUtils.isEmpty(server) || StringUtils.isEmpty(port))
 		{
@@ -78,6 +90,7 @@ public class EmailUtil
 			emailMessage.setText(message);
 
 			Transport.send(emailMessage);
+			LOG.info("E-mail sent!");
 		}
 		catch (MessagingException e)
 		{

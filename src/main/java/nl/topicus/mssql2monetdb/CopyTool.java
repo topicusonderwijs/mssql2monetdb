@@ -87,6 +87,7 @@ public class CopyTool
 			EmailUtil.sendMail(e, config.getDatabaseProperties());
 			
 			CopyToolConnectionManager.getInstance().closeConnections();
+			LOG.info("Finished");
 			System.exit(1);
 		}
 	}
@@ -1061,28 +1062,21 @@ public class CopyTool
 		}
 	}
 
-	private void copyTempTableToCurrentTable(CopyTable copyTable)
+	private void copyTempTableToCurrentTable(CopyTable copyTable) throws SQLException
 	{
 		// create table schema.temptable as select * from schema.currentTable with data;
 		LOG.info("Copying the temp table to the result table");
-		try
-		{
-			// drop result table before replacing with temp table
-			if (MonetDBUtil.monetDBTableExists(copyTable.getCurrentTable()))
-			{
-				MonetDBUtil.dropMonetDBTable(copyTable.getCurrentTable());
-			}
-			MonetDBUtil.copyMonetDBTableToNewMonetDBTable(copyTable.getTempTable(),
-				copyTable.getCurrentTable());
-			// drop temp table, we wont need it anymore
-			MonetDBUtil.dropMonetDBTable(copyTable.getTempTable());
-		}
-		catch (SQLException e)
-		{
-			LOG.error("Error copying temp table to current table", e);
 
-			EmailUtil.sendMail("Error copying temp table to current table: "+ e.getStackTrace(), "Error copying temp table to current table in monetdb", config.getDatabaseProperties());
+		// drop result table before replacing with temp table
+		if (MonetDBUtil.monetDBTableExists(copyTable.getCurrentTable()))
+		{
+			MonetDBUtil.dropMonetDBTable(copyTable.getCurrentTable());
 		}
+		MonetDBUtil.copyMonetDBTableToNewMonetDBTable(copyTable.getTempTable(),
+			copyTable.getCurrentTable());
+		// drop temp table, we wont need it anymore
+		MonetDBUtil.dropMonetDBTable(copyTable.getTempTable());
+
 
 		LOG.info("Finished copying the temp table to the result table");
 	}
@@ -1111,28 +1105,11 @@ public class CopyTool
 			+ timeLeft + " seconds");
 	}
 	
-	private void loadDatabaseDrivers () throws CopyToolException
+	private void loadDatabaseDrivers () throws ClassNotFoundException
 	{
 		// make sure JDBC drivers are loaded
-		try
-		{
-			Class.forName("nl.cwi.monetdb.jdbc.MonetDriver");
-		}
-		catch (ClassNotFoundException e)
-		{
-			EmailUtil.sendMail("Unable to load MonetDB JDBC driverwith the following error: "+ e.getStackTrace(), "Unable to load MonetDB JDBC driver in monetdb", config.getDatabaseProperties());
-			throw new CopyToolException("Unable to load MonetDB JDBC driver");
-		}
-
-		try
-		{
-			Class.forName("net.sourceforge.jtds.jdbc.Driver");
-		}
-		catch (ClassNotFoundException e)
-		{
-			EmailUtil.sendMail("Unable to load MS SQL jTDS JDBC driver with the following error: "+ e.getStackTrace(), "Unable to load MS SQL jTDS JDBC driver in monetdb", config.getDatabaseProperties());
-			throw new CopyToolException("Unable to load jTDS JDBC driver");
-		}
+		Class.forName("nl.cwi.monetdb.jdbc.MonetDriver");
+		Class.forName("net.sourceforge.jtds.jdbc.Driver");
 	}
 
 }
