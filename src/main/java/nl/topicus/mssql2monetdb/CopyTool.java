@@ -72,7 +72,8 @@ public class CopyTool
 		// load config
 		try {
 			config = new CopyToolConfig(args);
-		} catch (ConfigException e) {
+		} catch (Exception e) {
+			LOG.fatal(e.getMessage());
 			System.exit(1);
 		}
 		

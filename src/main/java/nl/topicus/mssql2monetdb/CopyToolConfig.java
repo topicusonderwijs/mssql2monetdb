@@ -20,6 +20,9 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.commons.configuration.Configuration;
+import org.apache.commons.configuration.ConfigurationException;
+import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
@@ -100,7 +103,7 @@ public class CopyToolConfig
 	    return sb.toString();
 	}
 
-	public CopyToolConfig(String args[]) throws ConfigException
+	public CopyToolConfig(String args[]) throws ConfigException, ConfigurationException
 	{
 		PropertyConfigurator.configure("log4j.properties");
 		LOG.info("Started logging of the MSSQL2MonetDB copy tool");
@@ -151,30 +154,21 @@ public class CopyToolConfig
 		
 		LOG.info("Using config file: " + configFile.getAbsolutePath());
 
-		Properties config = new Properties();
-		try
-		{
-			config.load(new FileInputStream(configFile));
-		}
-		catch (Exception e)
-		{
-			LOG.error("ERROR: unable to read config file");
-			e.printStackTrace();
-			throw new ConfigException("Unable to read config file");
-		}
+		// Load configuration using Commons Configuration lib (allows including other config files)
+		Configuration config = new PropertiesConfiguration(configFile);
 		
-		// replace environment variable references in config
-		config = loadEnvironmentVariables(config);
+		// replace environment variable references in config and transform into a simple Properties object
+		Properties props = loadEnvironmentVariables(config);
 
-		this.databaseProperties = getAndValidateDatabaseProperties(config);
-		this.sourceDatabases = findSourceDatabases(config);
-		this.tablesToCopy = findTablesToCopy(config);
+		this.databaseProperties = getAndValidateDatabaseProperties(props);
+		this.sourceDatabases = findSourceDatabases(props);
+		this.tablesToCopy = findTablesToCopy(props);
 		
-		findSchedulerProperties(config);
+		findSchedulerProperties(props);
 			
-		findTriggerProperties(config);
+		findTriggerProperties(props);
 		
-		this.tempDirectory = findTempDirectory(config);
+		this.tempDirectory = findTempDirectory(props);
 
 		this.noSwitch = cmd.hasOption("no-switch");
 		LOG.info("No-Switch-flag set to: " + noSwitch);
@@ -186,17 +180,19 @@ public class CopyToolConfig
 		//checkSchedulingSource();
 	}
 	
-	private Properties loadEnvironmentVariables (Properties config)
-	{
-		for(Object key : config.keySet())
+	private Properties loadEnvironmentVariables (Configuration config)
+	{		
+		Iterator iter = config.getKeys();
+		Properties newProps = new Properties();
+		while(iter.hasNext())
 		{
-			String value = config.getProperty(key.toString());
+			String key = iter.next().toString();
+			String value = config.getString(key.toString());
 			
 			// an environment variable value?
 			if (value.toLowerCase().startsWith("env:")) 
 			{
 				value = this.getEnvironmentValue(value, key.toString());
-				config.setProperty(key.toString(), value);
 			}
 			else
 			{
@@ -215,12 +211,12 @@ public class CopyToolConfig
 						pos = 0;
 					}
 				}
-				
-				config.setProperty(key.toString(), value);
 			}
+			
+			newProps.setProperty(key, value);
 		}
 		
-		return config;
+		return newProps;
 	}
 	
 	private String getEnvironmentValue(String refParts, String key)
