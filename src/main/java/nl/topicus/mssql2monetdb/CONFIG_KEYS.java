@@ -7,6 +7,7 @@ public enum CONFIG_KEYS
 	MONETDB_PASSWORD("monetdb.password"),
 	MONETDB_SERVER("monetdb.server"),
 	MONETDB_DATABASE("monetdb.database"),
+	MAIL_ENABLED("mail.enabled", true),
 	MAIL_TO("mail.to"),
 	MAIL_FROM("mail.from"),
 	MAIL_SERVER("mail.server"),

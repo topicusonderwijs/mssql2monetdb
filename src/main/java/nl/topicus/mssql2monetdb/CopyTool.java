@@ -235,12 +235,8 @@ public class CopyTool
 				for(CopyTable copyTable : tablesToCopy.values())
 				{
 					// find latest version of table
-					try {
-						String newestVersion = findNewestTable(copyTable);
-						copyTable.setLoadDate(newestVersion);
-					} catch (SQLException e) {
-						LOG.warn("Unable to find newest version of table '" + copyTable.getToName() + "'");
-					}					
+					String newestVersion = findNewestTable(copyTable);
+					copyTable.setLoadDate(newestVersion);
 				}
 			}
 			

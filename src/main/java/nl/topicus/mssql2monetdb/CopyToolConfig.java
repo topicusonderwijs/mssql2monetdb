@@ -171,7 +171,7 @@ public class CopyToolConfig
 		this.tablesToCopy = findTablesToCopy(config);
 		
 		findSchedulerProperties(config);
-		
+			
 		findTriggerProperties(config);
 		
 		this.tempDirectory = findTempDirectory(config);
