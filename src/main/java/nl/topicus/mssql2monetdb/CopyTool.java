@@ -82,13 +82,17 @@ public class CopyTool
 		// run tool
 		try {
 			tool.run(config);
-		} catch (CopyToolException e) {
+		} catch (Exception e) {
 			LOG.fatal(e.getMessage(), e);
+			EmailUtil.sendMail(e, config.getDatabaseProperties());
+			
+			CopyToolConnectionManager.getInstance().closeConnections();
+			LOG.info("Finished");
 			System.exit(1);
 		}
 	}
 
-	public void run(CopyToolConfig config) throws CopyToolException
+	public void run(CopyToolConfig config) throws Exception
 	{
 		if (config == null)
 		{
@@ -115,6 +119,8 @@ public class CopyTool
 					// we catch every exception because we don't want to fail
 					// out of the scheduler
 					LOG.error("Caught exception: " + e.getMessage(), e);
+					EmailUtil.sendMail(e, this.config.getDatabaseProperties());
+					CopyToolConnectionManager.getInstance().closeConnections();
 				}
 
 				LOG.info("Scheduling enabled, sleeping for " + (interval/1000) + " seconds until next run");
@@ -145,7 +151,7 @@ public class CopyTool
 		}
 	}
 	
-	private void doCopy () throws CopyToolException
+	private void doCopy () throws Exception
 	{
 		HashMap<String, CopyTable> tablesToCopy = config.getTablesToCopy();
 		
@@ -155,9 +161,7 @@ public class CopyTool
 		// no tables to copy?
 		if (tablesToCopy.size() == 0)
 		{
-			LOG.warn("No tables to copy");
-			CopyToolConnectionManager.getInstance().closeConnections();
-			return;
+			throw new Exception("No tables to copy");
 		}
 		
 		// check if trigger is enabled and if so, if there is any new data
@@ -181,28 +185,16 @@ public class CopyTool
 			}
 			
 			// verify MonetDB database is working by opening connection
-			try {
-				CopyToolConnectionManager.getInstance().openMonetDbConnection();
-			} catch (SQLException e) {
-				LOG.error("Unable to open connection to target MonetDB database: " + e.getMessage(), e);
-				CopyToolConnectionManager.getInstance().closeConnections();
-				return;
-			}
+			CopyToolConnectionManager.getInstance().openMonetDbConnection();
 			
 			LOG.info("STARTING PHASE 1: copying data from MS SQL source databases to local disk");
 			
 			// phase 1: copy data from MS SQL sources to local disk
-			try {
-				for(CopyTable table : tablesToCopy.values())
-				{
-					copyData(table);
-				}
-			} catch (Exception e) {
-				anyErrors = true;
-				LOG.error("Unable to copy data to disk", e);
-				EmailUtil.sendMail("Unable to copy data with the following error: "+ e.getStackTrace(), "Unable to copy data from table in monetdb", config.getDatabaseProperties());
+			for(CopyTable table : tablesToCopy.values())
+			{
+				copyData(table);
 			}
-			
+
 			LOG.info("PHASE 1 FINISHED: all data copied from MS SQL source databases to local disk");
 			
 			LOG.info("STARTING PHASE 2: loading data into target MonetDB database");
@@ -214,24 +206,18 @@ public class CopyTool
 			String loadDateStr = dateFormat.format(cal.getTime());
 			
 			// phase 2: load data from disk into MonetDB
-			try {
-				for (CopyTable table : tablesToCopy.values())
-				{
-					// pass load date to table
-					table.setLoadDate(loadDateStr);
-									
-					// load new data into MonetDB
-					loadData(table);
-					
-					// remove temp data from disk
-					removeTempData(table);
-				}
-			} catch (Exception e) {
-				anyErrors = true;
-				LOG.error("Unable to load data into MonetDB", e);
-				EmailUtil.sendMail("Unable to load data with the following error: "+ e.getStackTrace(), "Unable to load data table into monetdb", config.getDatabaseProperties());
+			for (CopyTable table : tablesToCopy.values())
+			{
+				// pass load date to table
+				table.setLoadDate(loadDateStr);
+								
+				// load new data into MonetDB
+				loadData(table);
+				
+				// remove temp data from disk
+				removeTempData(table);
 			}
-			
+
 			LOG.info("PHASE 2 FINISHED: all data loaded into target MonetDB database");
 		}
 		else {
@@ -249,12 +235,8 @@ public class CopyTool
 				for(CopyTable copyTable : tablesToCopy.values())
 				{
 					// find latest version of table
-					try {
-						String newestVersion = findNewestTable(copyTable);
-						copyTable.setLoadDate(newestVersion);
-					} catch (SQLException e) {
-						LOG.warn("Unable to find newest version of table '" + copyTable.getToName() + "'");
-					}					
+					String newestVersion = findNewestTable(copyTable);
+					copyTable.setLoadDate(newestVersion);
 				}
 			}
 			
@@ -271,27 +253,18 @@ public class CopyTool
 					copyTempTableToCurrentTable(copyTable);
 				}
 				
-				try
+				// set view to current table because it contains the new data now
+				if (copyTable.isUseFastViewSwitching())
 				{
-					// set view to current table because it contains the new data now
-					if (copyTable.isUseFastViewSwitching())
+					if(StringUtils.isEmpty(copyTable.getLoadDate()))
 					{
-						if(StringUtils.isEmpty(copyTable.getLoadDate()))
-						{
-							LOG.error("Unable to switch view of table '" + copyTable.getToName() + "' due to missing load date");
-						}
-						else
-						{
-							MonetDBUtil.dropAndRecreateViewForTable(copyTable.getSchema(),
-									copyTable.getToName(), copyTable.getCurrentTable());
-						}
+						LOG.error("Unable to switch view of table '" + copyTable.getToName() + "' due to missing load date");
 					}
-				}
-				catch (SQLException e)
-				{
-					anyErrors = true;
-					LOG.error("Unable to create view '" + copyTable.getToViewSql() + "'", e);
-					EmailUtil.sendMail("Unable to create view" + copyTable.getToViewSql() + " with the following error: "+ e.toString(), "Unable to create view in monetdb", config.getDatabaseProperties());
+					else
+					{
+						MonetDBUtil.dropAndRecreateViewForTable(copyTable.getSchema(),
+								copyTable.getToName(), copyTable.getCurrentTable());
+					}
 				}
 			}
 			LOG.info("PHASE 3 FINISHED: all views have been switched");
@@ -1085,28 +1058,21 @@ public class CopyTool
 		}
 	}
 
-	private void copyTempTableToCurrentTable(CopyTable copyTable)
+	private void copyTempTableToCurrentTable(CopyTable copyTable) throws SQLException
 	{
 		// create table schema.temptable as select * from schema.currentTable with data;
 		LOG.info("Copying the temp table to the result table");
-		try
-		{
-			// drop result table before replacing with temp table
-			if (MonetDBUtil.monetDBTableExists(copyTable.getCurrentTable()))
-			{
-				MonetDBUtil.dropMonetDBTable(copyTable.getCurrentTable());
-			}
-			MonetDBUtil.copyMonetDBTableToNewMonetDBTable(copyTable.getTempTable(),
-				copyTable.getCurrentTable());
-			// drop temp table, we wont need it anymore
-			MonetDBUtil.dropMonetDBTable(copyTable.getTempTable());
-		}
-		catch (SQLException e)
-		{
-			LOG.error("Error copying temp table to current table", e);
 
-			EmailUtil.sendMail("Error copying temp table to current table: "+ e.getStackTrace(), "Error copying temp table to current table in monetdb", config.getDatabaseProperties());
+		// drop result table before replacing with temp table
+		if (MonetDBUtil.monetDBTableExists(copyTable.getCurrentTable()))
+		{
+			MonetDBUtil.dropMonetDBTable(copyTable.getCurrentTable());
 		}
+		MonetDBUtil.copyMonetDBTableToNewMonetDBTable(copyTable.getTempTable(),
+			copyTable.getCurrentTable());
+		// drop temp table, we wont need it anymore
+		MonetDBUtil.dropMonetDBTable(copyTable.getTempTable());
+
 
 		LOG.info("Finished copying the temp table to the result table");
 	}
@@ -1135,28 +1101,11 @@ public class CopyTool
 			+ timeLeft + " seconds");
 	}
 	
-	private void loadDatabaseDrivers () throws CopyToolException
+	private void loadDatabaseDrivers () throws ClassNotFoundException
 	{
 		// make sure JDBC drivers are loaded
-		try
-		{
-			Class.forName("nl.cwi.monetdb.jdbc.MonetDriver");
-		}
-		catch (ClassNotFoundException e)
-		{
-			EmailUtil.sendMail("Unable to load MonetDB JDBC driverwith the following error: "+ e.getStackTrace(), "Unable to load MonetDB JDBC driver in monetdb", config.getDatabaseProperties());
-			throw new CopyToolException("Unable to load MonetDB JDBC driver");
-		}
-
-		try
-		{
-			Class.forName("net.sourceforge.jtds.jdbc.Driver");
-		}
-		catch (ClassNotFoundException e)
-		{
-			EmailUtil.sendMail("Unable to load MS SQL jTDS JDBC driver with the following error: "+ e.getStackTrace(), "Unable to load MS SQL jTDS JDBC driver in monetdb", config.getDatabaseProperties());
-			throw new CopyToolException("Unable to load jTDS JDBC driver");
-		}
+		Class.forName("nl.cwi.monetdb.jdbc.MonetDriver");
+		Class.forName("net.sourceforge.jtds.jdbc.Driver");
 	}
 
 }

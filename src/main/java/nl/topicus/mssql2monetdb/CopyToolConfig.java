@@ -171,7 +171,7 @@ public class CopyToolConfig
 		this.tablesToCopy = findTablesToCopy(config);
 		
 		findSchedulerProperties(config);
-		
+			
 		findTriggerProperties(config);
 		
 		this.tempDirectory = findTempDirectory(config);
@@ -192,20 +192,51 @@ public class CopyToolConfig
 		{
 			String value = config.getProperty(key.toString());
 			
-			// not an environment variable value?
-			if (!value.toLowerCase().startsWith("env:"))
-				continue;
-			
-			String[] split = value.split(":");
-			
-			// retrieve name of environment variable and (optional) default value
-			String envVar = split[1];
-			String defaultValue = (split.length >= 3) ? split[2] : "";
-			
-			// get value of environment variable
-			String envValue = System.getenv(envVar);
-			
-			if (StringUtils.isEmpty(envValue))
+			// an environment variable value?
+			if (value.toLowerCase().startsWith("env:")) 
+			{
+				value = this.getEnvironmentValue(value, key.toString());
+				config.setProperty(key.toString(), value);
+			}
+			else
+			{
+				// check if value contains references to environment variables
+				int pos = -1;
+				while((pos = value.indexOf("{env:", pos+1)) > -1)
+				{
+					int end = value.indexOf("}", pos);
+					if (end > -1)
+					{
+						String refPart = value.substring(pos+1, end);
+						String replaceValue = this.getEnvironmentValue(refPart, null);
+						
+						value = value.replace("{" + refPart + "}", replaceValue);						
+						
+						pos = 0;
+					}
+				}
+				
+				config.setProperty(key.toString(), value);
+			}
+		}
+		
+		return config;
+	}
+	
+	private String getEnvironmentValue(String refParts, String key)
+	{
+		String[] split = refParts.split(":");
+		
+		// retrieve name of environment variable and (optional) default value
+		String envVar = split[1];
+		String defaultValue = (split.length >= 3) ? split[2] : "";
+		
+		// get value of environment variable
+		String envValue = System.getenv(envVar);
+		
+		if (StringUtils.isEmpty(envValue))
+		{
+			if (!StringUtils.isEmpty(key))
 			{
 				if (StringUtils.isEmpty(defaultValue))
 				{
@@ -217,15 +248,12 @@ public class CopyToolConfig
 					LOG.info("Configuration property '" + key.toString() + "' set to default value '" + defaultValue + "'."
 							+ "Environment variable '" + envVar + "' is empty or not set.");
 				}
-				
-				envValue = defaultValue;
 			}
 			
-			// set new value of config property
-			config.setProperty(key.toString(), envValue);
+			envValue = defaultValue;
 		}
 		
-		return config;
+		return envValue;
 	}
 
 	private Properties getAndValidateDatabaseProperties(Properties config) throws ConfigException
