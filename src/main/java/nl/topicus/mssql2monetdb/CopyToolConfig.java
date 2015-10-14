@@ -764,6 +764,7 @@ public class CopyToolConfig
 					+ "' is missing name of to table. Using name of from table ("
 					+ table.getFromName() + ")");
 				table.getCurrentTable().setName(table.getFromName());
+				table.setToName(table.getFromName());
 			}
 			
 			// if no source database has been specified then the default source

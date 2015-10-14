@@ -658,24 +658,23 @@ public class CopyTool
 			for (int i = 1; i <= columnCount; i++)
 			{
 				Object value = resultSet.getObject(i);
-				String valueStr = "";
 
 				if (value == null)
 				{
-					valueStr = "";
+					bw.write("\\N");
 				}
 				else
 				{
-					valueStr = value.toString();
+					String valueStr = value.toString();
 
 					// escape \ with \\
 					valueStr = valueStr.replaceAll("\\\\", "\\\\\\\\");
 
 					// escape " with \"
 					valueStr = valueStr.replaceAll("\"", "\\\\\"");
-				}
-
-				bw.write("\"" + valueStr + "\"");
+					
+					bw.write("\"" + valueStr + "\"");
+				}			
 
 				// column separator (not for last column)
 				if (i < columnCount)
@@ -866,7 +865,7 @@ public class CopyTool
 			{
 				String value = line[i-1];
 
-				if (StringUtils.isEmpty(value))
+				if (value.equals("\\N"))
 				{
 					values[i - 1] = "NULL";
 				}
@@ -940,7 +939,7 @@ public class CopyTool
 			query.append(rowCount).append(" RECORDS ");
 		
 		query.append(" INTO ").append(monetDBTable.getToTableSql());		
-		query.append(" FROM STDIN USING DELIMITERS ',','\\n','\"' NULL AS ''");
+		query.append(" FROM STDIN USING DELIMITERS ',','\\n','\"' NULL AS '\\\\N'");
 		
 		if (useLockedMode)
 			query.append(" LOCKED");
@@ -1010,7 +1009,7 @@ public class CopyTool
 		
 		query.append(" INTO ").append(monetDBTable.getToTableSql());
 		query.append(" FROM '").append(dataFile.getAbsolutePath()).append("'");
-		query.append(" USING DELIMITERS ',','\\n','\"' NULL AS ''");
+		query.append(" USING DELIMITERS ',','\\n','\"' NULL AS '\\\\N'");
 		
 		if (useLockedMode)
 			query.append(" LOCKED");
