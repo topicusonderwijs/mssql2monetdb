@@ -455,13 +455,14 @@ public class MonetDBUtil
 				+ monetDBTable.getToTableSql() + "' on MonetDB server...");
 			
 			// drop current table/view
-			boolean alreadyDropped = false;
-			while(tableOrViewExists(schema, name))
+			// we do this in a loop (of max 10) to ensure it really is dropped
+			// due to a possible bug in MonetDB whereby a view can exist multiple times
+			for(int i=0; i < 10 && tableOrViewExists(schema, name); i++)
 			{				
 				boolean isTable = isTable(schema, name);
 				
 				// display warning when table/view should have been dropped already
-				if (alreadyDropped)
+				if (i > 0)
 				{
 					if (isTable)
 						LOG.warn(String.format("Table %s still exists despite previous DROP. This should not be possible!", fullName));
@@ -491,9 +492,6 @@ public class MonetDBUtil
 					
 					throw e;
 				}
-				
-				// mark as dropped
-				alreadyDropped = true;
 			}
 			
 			// create new view
