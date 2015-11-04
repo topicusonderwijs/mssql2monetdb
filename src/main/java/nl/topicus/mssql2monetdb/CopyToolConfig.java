@@ -826,8 +826,12 @@ public class CopyToolConfig
 			LOG.info("The following tables will be copied: ");
 			for (CopyTable table : tablesToCopy.values())
 			{
-				LOG.info("* " + table.getFromName() + " -> "
-					+ table.getCurrentTable().getNameWithPrefixes());
+				LOG.info(String.format(
+					"* %s -> %s.%s",
+					table.getFromName(),
+					table.getCurrentTable().getCopyTable().getSchema(),
+					table.getCurrentTable().getName()
+				));
 			}
 		}
 

@@ -1,5 +1,6 @@
 package nl.topicus.mssql2monetdb.util;
 
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -38,16 +39,19 @@ public class MonetDBUtil
 	 */
 	public static boolean tableOrViewExists(String schema, String name) throws SQLException
 	{
-		try
+		try (Statement q =
+				CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement())
 		{
-			Statement q =
-				CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
 			ResultSet result =
 				q.executeQuery("SELECT name FROM sys.tables WHERE name = '" + name
 					+ "' AND schema_id = (SELECT id FROM sys.schemas WHERE name = '" + schema
 					+ "')");
+			
+			boolean ret = result.next();
+			result.close();
+			
 			// is true if rows exists, otherwise it is false
-			return result.next();
+			return ret;
 		}
 		catch (SQLException e)
 		{
@@ -59,20 +63,21 @@ public class MonetDBUtil
 
 	public static boolean isTable(String schema, String name) throws SQLException
 	{
-		try
+		try (	Statement q =
+				CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement())
 		{
-			Statement q =
-				CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
+		
 			ResultSet result =
 				q.executeQuery("SELECT query FROM sys.tables WHERE name = '" + name
 					+ "' and schema_id = (SELECT id from sys.schemas WHERE name = '" + schema
 					+ "')");
-			// move resultset to the actual result
-			if (!result.next())
-				return false;
+			
 			// the query column will be filled with a query when its a view, so if its
-			// null it will be a table
-			return result.getObject("query") == null;
+			// null it will be a table			
+			boolean isTable = (result.next() && result.getObject("query") == null);
+			result.close();
+			
+			return isTable;
 		}
 		catch (SQLException e)
 		{
@@ -396,10 +401,10 @@ public class MonetDBUtil
 		{
 			LOG.info("Dropping table or view '" + fullName + "' on MonetDB server...");
 			
-			try {
-				Statement stmt =
+			try (Statement stmt =
 					CopyToolConnectionManager.getInstance().getMonetDbConnection()
-						.createStatement();
+						.createStatement())
+			{
 				StringBuilder builder = new StringBuilder();
 				if (tableOrViewExists(schema, name))
 				{
@@ -435,44 +440,89 @@ public class MonetDBUtil
 	public static void dropAndRecreateViewForTable(String schema, String name,
 			MonetDBTable monetDBTable) throws SQLException
 	{
-		String fullName = schema + "." + name;
+		Connection conn = CopyToolConnectionManager.getInstance().getMonetDbConnection();
+		
+		// disable autocommit to work in a single transaction
+		boolean oldAutoCommit = conn.getAutoCommit();
+		conn.setAutoCommit(false);
+		
+		// make sure the referenced table exists 
 		if (monetDBTableExists(monetDBTable))
 		{
+			String fullName = schema + "." + name;
+			
 			LOG.info("Drop and recreate or create the view '" + fullName + "' for table '"
 				+ monetDBTable.getToTableSql() + "' on MonetDB server...");
-
-			try
-			{
-				Statement stmt =
-					CopyToolConnectionManager.getInstance().getMonetDbConnection()
-						.createStatement();
-				StringBuilder builder = new StringBuilder();
-				if (tableOrViewExists(schema, name))
+			
+			// drop current table/view
+			// we do this in a loop (of max 10) to ensure it really is dropped
+			// due to a possible bug in MonetDB whereby a view can exist multiple times
+			for(int i=0; i < 10 && tableOrViewExists(schema, name); i++)
+			{				
+				boolean isTable = isTable(schema, name);
+				
+				// display warning when table/view should have been dropped already
+				if (i > 0)
 				{
-					// if its a table, drop the table
-					if (isTable(schema, name))
-						builder.append("DROP TABLE " + fullName + ";");
+					if (isTable)
+						LOG.warn(String.format("Table %s still exists despite previous DROP. This should not be possible!", fullName));
 					else
-						builder.append("DROP VIEW " + fullName + ";");
+						LOG.warn(String.format("View %s still exists despite previous DROP. This should not be possible!", fullName));
 				}
-
-				builder.append("CREATE VIEW " + fullName + " AS SELECT * FROM "
-					+ monetDBTable.getToTableSql());
-
-				stmt.execute(builder.toString());
+				
+				try (Statement stmt = conn.createStatement()) 
+				{
+					if (isTable)
+					{
+						LOG.info(String.format("Dropping existing table '%s'...", fullName));
+						stmt.execute("DROP TABLE " + fullName + ";");
+						LOG.info("Table dropped");
+					}
+					else
+					{
+						LOG.info(String.format("Dropping existing view '%s'...", fullName));
+						stmt.execute("DROP VIEW " + fullName + ";");
+						LOG.info("View dropped");
+					}
+				} catch (SQLException e) {
+					if (isTable)
+						LOG.error(String.format("Unable to drop table '%s'", fullName));
+					else
+						LOG.error(String.format("Unable to drop view '%s'", fullName));
+					
+					throw e;
+				}
 			}
-			catch (SQLException e)
+			
+			// create new view
+			try (Statement q = conn.createStatement())
 			{
-				LOG.error("Error dropping and recreating the view "
-					+ monetDBTable.getCopyTable().getToName(), e);
-				throw new RuntimeException(e);
+				q.execute(String.format(
+					"CREATE VIEW %s AS SELECT * FROM %s",
+					fullName,
+					monetDBTable.getToTableSql()
+				));
+			} catch (SQLException e) {
+				LOG.error(String.format(
+					"Unable to create view %s for table %s",
+					fullName,
+					monetDBTable.getToTableSql()
+				));				
+				
+				throw e;
 			}
+			
+			// commit transaction
+			conn.commit();
 			LOG.info("View '" + fullName + "' created");
 		}
 		else
 		{
-			LOG.info("View not created because the monetDBTable '" + monetDBTable.getToTableSql()
+			LOG.info("View not created because the MonetDB table '" + monetDBTable.getToTableSql()
 				+ "' does not exist");
 		}
+		
+		// restore previous autocommit mode
+		conn.setAutoCommit(oldAutoCommit);
 	}
 }
