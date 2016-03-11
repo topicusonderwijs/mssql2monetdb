@@ -58,13 +58,17 @@ public class CopyTool
 	private int lastRunColType;
 	
 	private Pattern versionPattern = Pattern.compile("[0-9]{4}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2}$");
+	
+	private static final int EXIT_CODE_ERROR = 1;
+	
+	private static final int EXIT_CODE_NO_NEW_DATA = 2;
 
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args)
 	{
-		//the log files is not yet inistialized
+		//the logger is not yet initialized
 		System.out.println("Started MSSQL2MonetDB copy tool");
 
 		CopyToolConfig config = null;
@@ -74,7 +78,7 @@ public class CopyTool
 			config = new CopyToolConfig(args);
 		} catch (Exception e) {
 			LOG.fatal(e.getMessage());
-			System.exit(1);
+			System.exit(EXIT_CODE_ERROR);
 		}
 		
 		// setup tool
@@ -83,13 +87,18 @@ public class CopyTool
 		// run tool
 		try {
 			tool.run(config);
+			
+		} catch (NoNewDataException e) {
+			LOG.info(e.getMessage());
+			LOG.info("Finished");
+			System.exit(EXIT_CODE_NO_NEW_DATA);
 		} catch (Exception e) {
 			LOG.fatal(e.getMessage(), e);
 			EmailUtil.sendMail(e, config.getDatabaseProperties());
 			
 			CopyToolConnectionManager.getInstance().closeConnections();
 			LOG.info("Finished");
-			System.exit(1);
+			System.exit(EXIT_CODE_ERROR);
 		}
 	}
 
@@ -172,9 +181,8 @@ public class CopyTool
 			
 			if (config.isTriggerEnabled() && !checkForNewData())
 			{
-				LOG.info("No indication of new data from trigger source '" + config.getTriggerTable() + "." + config.getTriggerColumn() + "'");
 				CopyToolConnectionManager.getInstance().closeConnections();
-				return;
+				throw new NoNewDataException("No indication of new data from trigger source '" + config.getTriggerTable() + "." + config.getTriggerColumn() + "'");
 			}
 			
 			// verify all MSSQL tables have data
