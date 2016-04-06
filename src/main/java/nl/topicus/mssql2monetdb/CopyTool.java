@@ -28,6 +28,7 @@ import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -163,7 +164,7 @@ public class CopyTool
 	
 	private void doCopy () throws Exception
 	{
-		HashMap<String, CopyTable> tablesToCopy = config.getTablesToCopy();
+		Map<String, CopyTable> tablesToCopy = config.getTablesToCopy();
 		
 		boolean switchOnly = config.isSwitchOnly();
 		boolean noSwitch = config.hasNoSwitch();

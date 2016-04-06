@@ -4,6 +4,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashMap;
+import java.util.Map;
 
 import nl.topicus.mssql2monetdb.CopyTable;
 import nl.topicus.mssql2monetdb.CopyToolConnectionManager;
@@ -18,7 +19,7 @@ public class MssqlUtil
 	 * Check if all the MSSQL tables we are copying from have data. If a table is empty,
 	 * this usually indicates a problem, so we stop all copy actions.
 	 */
-	public static boolean allMSSQLTablesHaveData(HashMap<String, CopyTable> tablesToCopy) throws SQLException
+	public static boolean allMSSQLTablesHaveData(Map<String, CopyTable> tablesToCopy) throws SQLException
 	{
 		
 		for (CopyTable table : tablesToCopy.values())

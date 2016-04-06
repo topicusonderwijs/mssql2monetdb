@@ -5,6 +5,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import nl.cwi.monetdb.mcl.net.MapiSocket;
@@ -23,7 +24,7 @@ public class CopyToolConnectionManager
 
 	private MapiSocket monetDbServer;
 	
-	private HashMap<String, SourceDatabase> sourceDatabases;
+	private Map<String, SourceDatabase> sourceDatabases;
 	
 	private CopyToolConfig config;
 
