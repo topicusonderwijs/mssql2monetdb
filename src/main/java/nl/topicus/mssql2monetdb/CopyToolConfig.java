@@ -25,12 +25,12 @@ import org.apache.commons.configuration.Configuration;
 import org.apache.commons.configuration.ConfigurationException;
 import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.commons.lang.StringUtils;
-import org.apache.log4j.Logger;
-import org.apache.log4j.PropertyConfigurator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class CopyToolConfig
 {
-	private static final Logger LOG = Logger.getLogger(CopyToolConfig.class);
+	private static final Logger LOG = LoggerFactory.getLogger(CopyToolConfig.class);
 
 	public static final int DEFAULT_BATCH_SIZE = 10000;
 	
@@ -106,7 +106,6 @@ public class CopyToolConfig
 
 	public CopyToolConfig(String args[]) throws ConfigException, ConfigurationException
 	{
-		PropertyConfigurator.configure("log4j.properties");
 		LOG.info("Started logging of the MSSQL2MonetDB copy tool");
 
 		Options options = new Options();
@@ -199,7 +198,7 @@ public class CopyToolConfig
 		this.switchOnly = cmd.hasOption("switch-only");
 		LOG.info("Switch-Only-flag set to: " + switchOnly);
 		
-		//manually switch just a single monetdb-table
+		//manually switch just a single monetdb-table and explicitly require the user to specify only wanting to switch a view to another backing table
 		if (cmd.hasOption("monetdb-table"))
 		{
 			CopyTable ct = new CopyTable();
@@ -341,7 +340,7 @@ public class CopyToolConfig
 
 		if (isMissing)
 		{
-			LOG.fatal("Missing essential config properties");
+			LOG.error("Missing essential config properties");
 			EmailUtil.sendMail("The following configs are missing: " + missingKeys.toString(), "Missing essential config properties in monetdb", config);
 			throw new ConfigException("Missing essential config properties");
 		}

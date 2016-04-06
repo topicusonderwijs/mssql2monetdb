@@ -8,15 +8,16 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.util.HashMap;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import nl.topicus.mssql2monetdb.CopyTable;
 import nl.topicus.mssql2monetdb.CopyToolConnectionManager;
 import nl.topicus.mssql2monetdb.MonetDBTable;
 
-import org.apache.log4j.Logger;
-
 public class MonetDBUtil
 {
-	private static final Logger LOG = Logger.getLogger(MonetDBUtil.class);
+	private static final Logger LOG = LoggerFactory.getLogger(MonetDBUtil.class);
 
 	/**
 	 * Check if a table exists in MonetDB by selecting and catching the

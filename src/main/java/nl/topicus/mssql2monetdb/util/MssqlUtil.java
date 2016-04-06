@@ -3,17 +3,17 @@ package nl.topicus.mssql2monetdb.util;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.HashMap;
 import java.util.Map;
 
 import nl.topicus.mssql2monetdb.CopyTable;
 import nl.topicus.mssql2monetdb.CopyToolConnectionManager;
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class MssqlUtil
 {
-	private static final Logger LOG = Logger.getLogger(MssqlUtil.class);
+	private static final Logger LOG = LoggerFactory.getLogger(MssqlUtil.class);
 
 	/**
 	 * Check if all the MSSQL tables we are copying from have data. If a table is empty,

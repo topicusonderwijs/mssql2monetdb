@@ -3,20 +3,19 @@ package nl.topicus.mssql2monetdb;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
 import nl.cwi.monetdb.mcl.net.MapiSocket;
-import nl.topicus.mssql2monetdb.util.EmailUtil;
 
 import org.apache.commons.lang.StringUtils;
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class CopyToolConnectionManager
 {
-	private static final Logger LOG = Logger.getLogger(CopyToolConnectionManager.class);
+	private static final Logger LOG = LoggerFactory.getLogger(CopyToolConnectionManager.class);
 
 	private static CopyToolConnectionManager instance = null;
 
