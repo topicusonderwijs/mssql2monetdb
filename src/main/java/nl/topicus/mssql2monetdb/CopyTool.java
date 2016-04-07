@@ -514,11 +514,15 @@ public class CopyTool
 		Statement q =
 			CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
 		
-		ResultSet result =
-			q.executeQuery("SELECT name FROM sys.tables WHERE name LIKE '" + table.getToName()
+		String query = "SELECT name FROM sys.tables WHERE name LIKE '" + table.getToName()
 				+ "_20%_%' AND name <> '" + table.getToName() + "' "
 				+ "AND schema_id = (SELECT id from sys.schemas WHERE name = '" + table.getSchema()
-				+ "') AND query IS NULL ORDER BY name DESC");
+				+ "') AND query IS NULL ORDER BY name DESC";
+
+		LOG.trace(query);
+
+		ResultSet result =
+			q.executeQuery(query);
 		
 		String version = "";
 		
@@ -531,7 +535,8 @@ public class CopyTool
 			{
 				version = matcher.group();
 			}
-			
+
+			LOG.info(String.format("Found schema=%s table %s with version %s", table.getSchema(), result.getString("name"), version));
 			
 		}
 		
