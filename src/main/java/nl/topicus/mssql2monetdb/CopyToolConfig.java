@@ -162,7 +162,14 @@ public class CopyToolConfig
 		OptionBuilder.withDescription("MonetDB database");
 		OptionBuilder.withLongOpt("monetdb-db");
 		options.addOption(OptionBuilder.create("d"));
-		
+
+		//schema
+		OptionBuilder.hasArg(true);
+		OptionBuilder.isRequired(false);
+		OptionBuilder.withDescription("MonetDB schema");
+		OptionBuilder.withLongOpt("monetdb-schema");
+		options.addOption(OptionBuilder.create("s"));
+
 		//table
 		OptionBuilder.hasArg(true);
 		OptionBuilder.isRequired(false);
@@ -207,8 +214,12 @@ public class CopyToolConfig
 			ct.setToName(table);
 			ct.setCreate(false);
 			ct.setDrop(true);
+			ct.setSchema(cmd.getOptionValue("monetdb-schema"));
 			ct.setCopyViaTempTable(false);
 			ct.setUseFastViewSwitching(true);
+			MonetDBTable monetDBTable = new MonetDBTable(ct);
+			monetDBTable.setName(ct.getToName());
+			ct.getMonetDBTables().add(monetDBTable);
 			this.tablesToCopy.put(table, ct);
 			
 			Properties monetDBProperties = new Properties();
