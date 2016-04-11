@@ -212,8 +212,9 @@ public class CopyToolConfig
 		List<String> requiredOptionsForSchemaSwitchOnly = Arrays.asList("monetdb-table", "monetdb-schema", "monetdb-db", "monetdb-user", "monetdb-password", "monetdb-server", "switch-only");
 		boolean allRequiredOptionsPresent = requiredOptionsForSchemaSwitchOnly
 				.stream()
-				.allMatch(o -> (cmd.hasOption(o) && !options.getOption(o).hasArg()) 
-								|| (cmd.getOptionValue(o) != null && !cmd.getOptionValue(o).isEmpty()));
+				.allMatch(o -> cmd.hasOption(o) 
+								&& (!options.getOption(o).hasArg() 
+										|| (cmd.getOptionValue(o) != null && !cmd.getOptionValue(o).isEmpty())));
 
 		if (allRequiredOptionsPresent)
 		{
