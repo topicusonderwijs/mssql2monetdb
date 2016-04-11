@@ -6,8 +6,10 @@ import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
@@ -108,7 +110,7 @@ public class CopyToolConfig
 	{
 		LOG.info("Started logging of the MSSQL2MonetDB copy tool");
 
-		Options options = new Options();
+		final Options options = new Options();
 
 		OptionBuilder.hasArg(true);
 		OptionBuilder.isRequired(false);
@@ -117,6 +119,7 @@ public class CopyToolConfig
 		options.addOption(OptionBuilder.create("c"));
 		
 		OptionBuilder.hasArg(false);
+		OptionBuilder.hasOptionalArgs(0);
 		OptionBuilder.isRequired(false);
 		OptionBuilder.withDescription("Specify if views will be switched or not");
 		OptionBuilder.withLongOpt("no-switch");
@@ -179,7 +182,7 @@ public class CopyToolConfig
 
 
 		CommandLineParser parser = new BasicParser();
-		CommandLine cmd = null;
+		final CommandLine cmd;
 		try
 		{
 			cmd = parser.parse(options, args);
@@ -206,7 +209,15 @@ public class CopyToolConfig
 		LOG.info("Switch-Only-flag set to: " + switchOnly);
 		
 		//manually switch just a single monetdb-table and explicitly require the user to specify only wanting to switch a view to another backing table
-		if (cmd.hasOption("monetdb-table") && cmd.hasOption("switch-only"))
+		List<String> requiredOptionsForSchemaSwitchOnly = Arrays.asList("monetdb-table", "monetdb-schema", "monetdb-db", "monetdb-user", "monetdb-password", "monetdb-server", "switch-only");
+		boolean allRequiredOptionsPresent = requiredOptionsForSchemaSwitchOnly
+				.stream()
+				.map(o -> cmd.hasOption(o)
+						&& !options.getOption(o).hasArg() 
+						|| (cmd.getOptionValue(o) != null && !cmd.getOptionValue(o).isEmpty())) 
+				.allMatch(b -> b.equals(true)); //all options should be present
+
+		if (allRequiredOptionsPresent)
 		{
 			CopyTable ct = new CopyTable();
 			String table = cmd.getOptionValue("monetdb-table");
@@ -257,7 +268,7 @@ public class CopyToolConfig
 		}
 		else
 		{
-			LOG.error("Either a config file or a set of MonetDB parameters should be specified.");
+			throw new IllegalArgumentException("Either a config file or a set of MonetDB parameters should be specified.");
 		}
 	}
 	
