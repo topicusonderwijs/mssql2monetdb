@@ -133,49 +133,49 @@ public class CopyToolConfig
 		OptionBuilder.isRequired(false);
 		OptionBuilder.withDescription("MonetDB username");
 		OptionBuilder.withLongOpt("monetdb-user");
-		options.addOption(OptionBuilder.create("u"));
-
+		options.addOption(OptionBuilder.create());
+	
 		//password
 		OptionBuilder.hasArg(true);
 		OptionBuilder.isRequired(false);
 		OptionBuilder.withDescription("MonetDB password");
 		OptionBuilder.withLongOpt("monetdb-password");
-		options.addOption(OptionBuilder.create("p"));
-		
+		options.addOption(OptionBuilder.create());
+
 		//hostname
 		OptionBuilder.hasArg(true);
 		OptionBuilder.isRequired(false);
 		OptionBuilder.withDescription("MonetDB server");
 		OptionBuilder.withLongOpt("monetdb-server");
-		options.addOption(OptionBuilder.create("s"));
-
+		options.addOption(OptionBuilder.create());
+		
 		//port
 		OptionBuilder.hasArg(true);
 		OptionBuilder.isRequired(false);
 		OptionBuilder.withDescription("MonetDB port");
 		OptionBuilder.withLongOpt("monetdb-port");
-		options.addOption(OptionBuilder.create("P"));
+		options.addOption(OptionBuilder.create());
 		
 		//database
 		OptionBuilder.hasArg(true);
 		OptionBuilder.isRequired(false);
 		OptionBuilder.withDescription("MonetDB database");
 		OptionBuilder.withLongOpt("monetdb-db");
-		options.addOption(OptionBuilder.create("d"));
-
+		options.addOption(OptionBuilder.create());
+		
 		//schema
 		OptionBuilder.hasArg(true);
 		OptionBuilder.isRequired(false);
 		OptionBuilder.withDescription("MonetDB schema");
 		OptionBuilder.withLongOpt("monetdb-schema");
-		options.addOption(OptionBuilder.create("s"));
+		options.addOption(OptionBuilder.create());
 
 		//table
 		OptionBuilder.hasArg(true);
 		OptionBuilder.isRequired(false);
 		OptionBuilder.withDescription("Table in MonetDB that should be switched");
 		OptionBuilder.withLongOpt("monetdb-table");
-		options.addOption(OptionBuilder.create("t"));
+		options.addOption(OptionBuilder.create());
 
 
 		CommandLineParser parser = new BasicParser();
@@ -206,7 +206,7 @@ public class CopyToolConfig
 		LOG.info("Switch-Only-flag set to: " + switchOnly);
 		
 		//manually switch just a single monetdb-table and explicitly require the user to specify only wanting to switch a view to another backing table
-		if (cmd.hasOption("monetdb-table"))
+		if (cmd.hasOption("monetdb-table") && cmd.hasOption("switch-only"))
 		{
 			CopyTable ct = new CopyTable();
 			String table = cmd.getOptionValue("monetdb-table");
