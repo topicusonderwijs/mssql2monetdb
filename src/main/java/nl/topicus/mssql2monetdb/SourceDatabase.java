@@ -6,10 +6,11 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.commons.lang.StringUtils;
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class SourceDatabase {
-	private static final Logger LOG = Logger.getLogger(SourceDatabase.class);
+	private static final Logger LOG = LoggerFactory.getLogger(SourceDatabase.class);
 	
 	private String id;
 	

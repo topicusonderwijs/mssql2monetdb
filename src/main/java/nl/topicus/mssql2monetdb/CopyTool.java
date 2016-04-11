@@ -27,7 +27,7 @@ import java.text.DateFormat;
 import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
-import java.util.HashMap;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -39,13 +39,14 @@ import nl.topicus.mssql2monetdb.util.MssqlUtil;
 import nl.topicus.mssql2monetdb.util.SerializableResultSetMetaData;
 
 import org.apache.commons.lang.StringUtils;
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import au.com.bytecode.opencsv.CSVReader;
 
 public class CopyTool
 {
-	private static final Logger LOG = Logger.getLogger(CopyTool.class);
+	private static final Logger LOG =  LoggerFactory.getLogger(CopyTool.class);
 	
 	private static final int SLEEP_INCREMENT = 1 * 60 * 1000;
 
@@ -77,7 +78,7 @@ public class CopyTool
 		try {
 			config = new CopyToolConfig(args);
 		} catch (Exception e) {
-			LOG.fatal(e.getMessage());
+			LOG.error(e.getMessage());
 			System.exit(EXIT_CODE_ERROR);
 		}
 		
@@ -93,7 +94,7 @@ public class CopyTool
 			LOG.info("Finished");
 			System.exit(EXIT_CODE_NO_NEW_DATA);
 		} catch (Exception e) {
-			LOG.fatal(e.getMessage(), e);
+			LOG.error(e.getMessage(), e);
 			EmailUtil.sendMail(e, config.getDatabaseProperties());
 			
 			CopyToolConnectionManager.getInstance().closeConnections();
@@ -163,7 +164,7 @@ public class CopyTool
 	
 	private void doCopy () throws Exception
 	{
-		HashMap<String, CopyTable> tablesToCopy = config.getTablesToCopy();
+		Map<String, CopyTable> tablesToCopy = config.getTablesToCopy();
 		
 		boolean switchOnly = config.isSwitchOnly();
 		boolean noSwitch = config.hasNoSwitch();
@@ -513,11 +514,15 @@ public class CopyTool
 		Statement q =
 			CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
 		
-		ResultSet result =
-			q.executeQuery("SELECT name FROM sys.tables WHERE name LIKE '" + table.getToName()
+		String query = "SELECT name FROM sys.tables WHERE name LIKE '" + table.getToName()
 				+ "_20%_%' AND name <> '" + table.getToName() + "' "
 				+ "AND schema_id = (SELECT id from sys.schemas WHERE name = '" + table.getSchema()
-				+ "') AND query IS NULL ORDER BY name DESC");
+				+ "') AND query IS NULL ORDER BY name DESC";
+
+		LOG.trace(query);
+
+		ResultSet result =
+			q.executeQuery(query);
 		
 		String version = "";
 		
@@ -530,7 +535,8 @@ public class CopyTool
 			{
 				version = matcher.group();
 			}
-			
+
+			LOG.info(String.format("Found schema=%s table %s with version %s", table.getSchema(), result.getString("name"), version));
 			
 		}
 		

@@ -15,11 +15,12 @@ import nl.topicus.mssql2monetdb.CopyToolConfig;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class EmailUtil
 {
-	private static final Logger LOG = Logger.getLogger(EmailUtil.class);
+	private static final Logger LOG = LoggerFactory.getLogger(EmailUtil.class);
 
 	/**
 	 * Sends an email with a given message en subject. The dataproperties provide the email settings en therefore have to be given to teh function.

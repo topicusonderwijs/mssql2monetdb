@@ -6,8 +6,11 @@ import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 
@@ -24,12 +27,12 @@ import org.apache.commons.configuration.Configuration;
 import org.apache.commons.configuration.ConfigurationException;
 import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.commons.lang.StringUtils;
-import org.apache.log4j.Logger;
-import org.apache.log4j.PropertyConfigurator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class CopyToolConfig
 {
-	private static final Logger LOG = Logger.getLogger(CopyToolConfig.class);
+	private static final Logger LOG = LoggerFactory.getLogger(CopyToolConfig.class);
 
 	public static final int DEFAULT_BATCH_SIZE = 10000;
 	
@@ -63,9 +66,9 @@ public class CopyToolConfig
 	
 	private boolean switchOnly;
 
-	private HashMap<String, SourceDatabase> sourceDatabases = new HashMap<String, SourceDatabase>(); 
+	private Map<String, SourceDatabase> sourceDatabases = new HashMap<>(); 
 	
-	private HashMap<String, CopyTable> tablesToCopy = new HashMap<String, CopyTable>();
+	private Map<String, CopyTable> tablesToCopy = new HashMap<>();
 	
 	public static boolean getBooleanProperty (Properties props, String key)
 	{
@@ -105,18 +108,18 @@ public class CopyToolConfig
 
 	public CopyToolConfig(String args[]) throws ConfigException, ConfigurationException
 	{
-		PropertyConfigurator.configure("log4j.properties");
 		LOG.info("Started logging of the MSSQL2MonetDB copy tool");
 
-		Options options = new Options();
+		final Options options = new Options();
 
 		OptionBuilder.hasArg(true);
-		OptionBuilder.isRequired(true);
+		OptionBuilder.isRequired(false);
 		OptionBuilder.withDescription("Specify the configuration properties file");
 		OptionBuilder.withLongOpt("config");
 		options.addOption(OptionBuilder.create("c"));
 		
 		OptionBuilder.hasArg(false);
+		OptionBuilder.hasOptionalArgs(0);
 		OptionBuilder.isRequired(false);
 		OptionBuilder.withDescription("Specify if views will be switched or not");
 		OptionBuilder.withLongOpt("no-switch");
@@ -128,9 +131,58 @@ public class CopyToolConfig
 		OptionBuilder.withLongOpt("switch-only");
 		options.addOption(OptionBuilder.create("so"));
 
+		//user
+		OptionBuilder.hasArg(true);
+		OptionBuilder.isRequired(false);
+		OptionBuilder.withDescription("MonetDB username");
+		OptionBuilder.withLongOpt("monetdb-user");
+		options.addOption(OptionBuilder.create());
+	
+		//password
+		OptionBuilder.hasArg(true);
+		OptionBuilder.isRequired(false);
+		OptionBuilder.withDescription("MonetDB password");
+		OptionBuilder.withLongOpt("monetdb-password");
+		options.addOption(OptionBuilder.create());
+
+		//hostname
+		OptionBuilder.hasArg(true);
+		OptionBuilder.isRequired(false);
+		OptionBuilder.withDescription("MonetDB server");
+		OptionBuilder.withLongOpt("monetdb-server");
+		options.addOption(OptionBuilder.create());
+		
+		//port
+		OptionBuilder.hasArg(true);
+		OptionBuilder.isRequired(false);
+		OptionBuilder.withDescription("MonetDB port");
+		OptionBuilder.withLongOpt("monetdb-port");
+		options.addOption(OptionBuilder.create());
+		
+		//database
+		OptionBuilder.hasArg(true);
+		OptionBuilder.isRequired(false);
+		OptionBuilder.withDescription("MonetDB database");
+		OptionBuilder.withLongOpt("monetdb-db");
+		options.addOption(OptionBuilder.create());
+		
+		//schema
+		OptionBuilder.hasArg(true);
+		OptionBuilder.isRequired(false);
+		OptionBuilder.withDescription("MonetDB schema");
+		OptionBuilder.withLongOpt("monetdb-schema");
+		options.addOption(OptionBuilder.create());
+
+		//table
+		OptionBuilder.hasArg(true);
+		OptionBuilder.isRequired(false);
+		OptionBuilder.withDescription("Table in MonetDB that should be switched");
+		OptionBuilder.withLongOpt("monetdb-table");
+		options.addOption(OptionBuilder.create());
+
 
 		CommandLineParser parser = new BasicParser();
-		CommandLine cmd = null;
+		final CommandLine cmd;
 		try
 		{
 			cmd = parser.parse(options, args);
@@ -150,34 +202,73 @@ public class CopyToolConfig
 			return;
 		}
 
-		configFile = new File(cmd.getOptionValue("config"));
-		
-		LOG.info("Using config file: " + configFile.getAbsolutePath());
-
-		// Load configuration using Commons Configuration lib (allows including other config files)
-		Configuration config = new PropertiesConfiguration(configFile);
-		
-		// replace environment variable references in config and transform into a simple Properties object
-		Properties props = loadEnvironmentVariables(config);
-
-		this.databaseProperties = getAndValidateDatabaseProperties(props);
-		this.sourceDatabases = findSourceDatabases(props);
-		this.tablesToCopy = findTablesToCopy(props);
-		
-		findSchedulerProperties(props);
-			
-		findTriggerProperties(props);
-		
-		this.tempDirectory = findTempDirectory(props);
-
 		this.noSwitch = cmd.hasOption("no-switch");
 		LOG.info("No-Switch-flag set to: " + noSwitch);
 
 		this.switchOnly = cmd.hasOption("switch-only");
 		LOG.info("Switch-Only-flag set to: " + switchOnly);
 		
-		// verify scheduling source
-		//checkSchedulingSource();
+		//manually switch just a single monetdb-table and explicitly require the user to specify only wanting to switch a view to another backing table
+		List<String> requiredOptionsForSchemaSwitchOnly = Arrays.asList("monetdb-table", "monetdb-schema", "monetdb-db", "monetdb-user", "monetdb-password", "monetdb-server", "switch-only");
+		boolean allRequiredOptionsPresent = requiredOptionsForSchemaSwitchOnly
+				.stream()
+				.allMatch(o -> cmd.hasOption(o) 
+								&& (!options.getOption(o).hasArg() 
+										|| (cmd.getOptionValue(o) != null && !cmd.getOptionValue(o).isEmpty())));
+
+		if (allRequiredOptionsPresent)
+		{
+			CopyTable ct = new CopyTable();
+			String table = cmd.getOptionValue("monetdb-table");
+			ct.setFromName(table);
+			ct.setToName(table);
+			ct.setCreate(false);
+			ct.setDrop(true);
+			ct.setSchema(cmd.getOptionValue("monetdb-schema"));
+			ct.setCopyViaTempTable(false);
+			ct.setUseFastViewSwitching(true);
+			MonetDBTable monetDBTable = new MonetDBTable(ct);
+			monetDBTable.setName(ct.getToName());
+			ct.getMonetDBTables().add(monetDBTable);
+			this.tablesToCopy.put(table, ct);
+			
+			Properties monetDBProperties = new Properties();
+			monetDBProperties.put(CONFIG_KEYS.MONETDB_DATABASE.toString(), cmd.getOptionValue("monetdb-db"));
+			monetDBProperties.put(CONFIG_KEYS.MONETDB_USER.toString(), cmd.getOptionValue("monetdb-user"));
+			monetDBProperties.put(CONFIG_KEYS.MONETDB_PASSWORD.toString(), cmd.getOptionValue("monetdb-password"));
+			monetDBProperties.put(CONFIG_KEYS.MONETDB_SERVER.toString(), cmd.getOptionValue("monetdb-server") + (cmd.hasOption("monetdb-port") ?  (":" + cmd.getOptionValue("monetdb-port")) : ""));
+			
+			this.databaseProperties = monetDBProperties;
+		}
+		else if (cmd.hasOption("config"))
+		{
+			configFile = new File(cmd.getOptionValue("config"));
+			
+			LOG.info("Using config file: " + configFile.getAbsolutePath());
+
+			// Load configuration using Commons Configuration lib (allows including other config files)
+			Configuration config = new PropertiesConfiguration(configFile);
+			
+			// replace environment variable references in config and transform into a simple Properties object
+			Properties props = loadEnvironmentVariables(config);
+
+			this.databaseProperties = getAndValidateDatabaseProperties(props);
+			this.sourceDatabases = findSourceDatabases(props);
+			this.tablesToCopy = findTablesToCopy(props);
+			
+			findSchedulerProperties(props);
+				
+			findTriggerProperties(props);
+			
+			this.tempDirectory = findTempDirectory(props);
+
+			// verify scheduling source
+			//checkSchedulingSource();
+		}
+		else
+		{
+			throw new IllegalArgumentException("Either a config file or a set of MonetDB parameters should be specified.");
+		}
 	}
 	
 	private Properties loadEnvironmentVariables (Configuration config)
@@ -270,7 +361,7 @@ public class CopyToolConfig
 
 		if (isMissing)
 		{
-			LOG.fatal("Missing essential config properties");
+			LOG.error("Missing essential config properties");
 			EmailUtil.sendMail("The following configs are missing: " + missingKeys.toString(), "Missing essential config properties in monetdb", config);
 			throw new ConfigException("Missing essential config properties");
 		}
@@ -873,7 +964,7 @@ public class CopyToolConfig
 		this.batchSize = batchSize;
 	}
 
-	public HashMap<String, CopyTable> getTablesToCopy()
+	public Map<String, CopyTable> getTablesToCopy()
 	{
 		return tablesToCopy;
 	}
@@ -904,7 +995,7 @@ public class CopyToolConfig
 		return checksum;
 	}
 	
-	public HashMap<String, SourceDatabase> getSourceDatabases ()
+	public Map<String, SourceDatabase> getSourceDatabases ()
 	{
 		return this.sourceDatabases;
 	}
