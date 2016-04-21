@@ -223,6 +223,7 @@ public class MonetDBUtil
 		sqlTypes.put(Types.TIMESTAMP, "timestamp");
 		sqlTypes.put(Types.TINYINT, "tinyint");
 		sqlTypes.put(Types.VARCHAR, "varchar");
+		sqlTypes.put(Types.BIT, "boolean");
 
 		int colType = metaData.getColumnType(colIndex);
 		String colTypeName = null;

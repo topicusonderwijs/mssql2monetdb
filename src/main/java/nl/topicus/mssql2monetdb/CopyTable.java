@@ -38,6 +38,12 @@ public class CopyTable
 	private String toName;
 
 	private String fromName;
+	
+	private String fromColumns;
+	
+	private String fromQuery;
+	
+	private String fromCountQuery;
 
 	private String schema = "sys";
 
@@ -241,5 +247,74 @@ public class CopyTable
 		sql = sql + MonetDBUtil.quoteMonetDbIdentifier(toName);
 
 		return sql;
+	}
+
+	public String getFromColumns() {
+		return fromColumns;
+	}
+
+	public void setFromColumns(String fromColumns) {
+		this.fromColumns = fromColumns;
+	}
+
+	public String getFromQuery() {
+		return fromQuery;
+	}
+
+	public void setFromQuery(String fromQuery) {
+		this.fromQuery = fromQuery;
+	}
+
+	public String getFromCountQuery() {
+		return fromCountQuery;
+	}
+
+	public void setFromCountQuery(String fromCountQuery) {
+		this.fromCountQuery = fromCountQuery;
+	}
+	
+	public String getDescription ()
+	{
+		if (StringUtils.isNotEmpty(getFromName()))
+		{
+			return "(table) " + getFromName();
+		}
+		else
+		{
+			String desc = "(query) " + StringUtils.abbreviate(getFromQuery(), 100);
+			desc = desc.replaceAll("\\s+"," "); 
+			desc = desc.replaceAll(" +", " ");
+			return desc;
+		}
+	}
+	
+	public String generateCountQuery ()
+	{
+		if (StringUtils.isNotEmpty(getFromName()))
+		{
+			return "SELECT COUNT(*) FROM [" + getFromName() + "]";
+		} else {
+			return getFromCountQuery();
+		}
+	}
+	
+	public String generateSelectQuery ()
+	{
+		if (StringUtils.isNotEmpty(getFromName()))
+		{
+			final String columns;
+			if (StringUtils.isNotEmpty(getFromColumns()))
+			{
+				columns = getFromColumns();
+			}
+			else
+			{
+				columns = "*";
+			}
+			
+			return "SELECT " + columns + " FROM [" + getFromName() + "]";
+		} else {
+			return getFromQuery();
+		}
 	}
 }

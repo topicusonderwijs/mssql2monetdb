@@ -621,7 +621,7 @@ public class CopyTool
 	 */
 	private void copyData(CopyTable table) throws Exception
 	{
-		LOG.info("Starting with copy of data from table " + table.getFromName() + " to disk...");
+		LOG.info("Starting with copy of data from '" + table.getDescription() + "' to disk...");
 		
 		// select data from MS SQL Server
 		Statement selectStmt =
@@ -629,16 +629,16 @@ public class CopyTool
 
 		// get number of rows in table
 		ResultSet resultSet =
-			selectStmt.executeQuery("SELECT COUNT(*) FROM [" + table.getFromName() + "]");
+			selectStmt.executeQuery(table.generateCountQuery());
 		resultSet.next();
 		
 		long rowCount = resultSet.getLong(1);
-		LOG.info("Found " + rowCount + " rows in table " + table.getFromName());
+		LOG.info("Found " + rowCount + " rows in '" + table.getDescription() + "'");
 		
 		resultSet.close();
 		
 		// get all data from table
-		resultSet = selectStmt.executeQuery("SELECT * FROM [" + table.getFromName() + "]");
+		resultSet = selectStmt.executeQuery(table.generateSelectQuery());
 
 		// get meta data (column info and such)
 		ResultSetMetaData metaData = resultSet.getMetaData();
@@ -719,7 +719,7 @@ public class CopyTool
 		wr.close();
 		LOG.info("Written row count to temp file: " + countFile.getAbsolutePath());
 		
-		LOG.info("Finished copying data of table " + table.getFromName() + " to disk!");
+		LOG.info("Finished copying data of '" + table.getDescription() + "' to disk!");
 	}
 	
 	/**
@@ -728,7 +728,7 @@ public class CopyTool
 	 */
 	private void loadData(CopyTable table) throws Exception
 	{
-		LOG.info("Starting to load data of table " + table.getFromName() + " into MonetDB...");
+		LOG.info("Starting to load data of '" + table.getDescription() + "' into MonetDB...");
 		long startTime = System.currentTimeMillis();
 		
 		// verify all temp files are available
@@ -738,17 +738,17 @@ public class CopyTool
 		
 		if (!dataFile.exists())
 		{
-			throw new Exception("Missing temporary data file for table '" + table.getFromName() + "'");
+			throw new Exception("Missing temporary data file for '" + table.getDescription() + "'");
 		}
 		
 		if (!countFile.exists())
 		{
-			throw new Exception("Missing temporary count file for table '" + table.getFromName() + "'");
+			throw new Exception("Missing temporary count file for '" + table.getDescription() + "'");
 		}
 		
 		if (!metaDataFile.exists())
 		{
-			throw new Exception("Missing temporary metadata file for table '" + table.getFromName() + "'");
+			throw new Exception("Missing temporary metadata file for '" + table.getDescription() + "'");
 		}
 		
 		// read count
@@ -760,11 +760,11 @@ public class CopyTool
 		try {
 			insertCount = Long.parseLong(countStr);
 		} catch (NumberFormatException e) {
-			throw new Exception("Unable to read row count from temporary count file for table '" + table.getFromName() + "'");
+			throw new Exception("Unable to read row count from temporary count file for '" + table.getDescription() + "'");
 		}
 		
 		if (insertCount == null)
-			throw new Exception("Unable to read row count from temporary count file for table '" + table.getFromName() + "'");
+			throw new Exception("Unable to read row count from temporary count file for '" + table.getDescription() + "'");
 		
 		// read metadata
 		SerializableResultSetMetaData metaData = null;
@@ -775,11 +775,11 @@ public class CopyTool
 		    in.close();
 		    fileIn.close();
 		} catch (IOException | ClassNotFoundException e) {
-			throw new Exception("Unable to read metadata from temporary metadata file for table '" + table.getFromName() + "'", e);
+			throw new Exception("Unable to read metadata from temporary metadata file for '" + table.getDescription() + "'", e);
 		}
 		
 		if (metaData == null)
-			throw new Exception("Unable to read metadata from temporary metadata file for table '" + table.getFromName() + "'");
+			throw new Exception("Unable to read metadata from temporary metadata file for '" + table.getDescription() + "'");
 		
 		MonetDBTable copyToTable =
 			table.isCopyViaTempTable() ? table.getTempTable() : table.getCurrentTable();
@@ -830,7 +830,7 @@ public class CopyTool
 		// still not loaded? then unable to load, throw exception
 		if (!isLoaded) 
 		{
-			throw new Exception("Unable to load data into MonetDB for table " + table.getFromName());
+			throw new Exception("Unable to load data into MonetDB for '" + table.getDescription() + "'");
 		}
 		
 		long loadTime = (System.currentTimeMillis() - startTime) / 1000;
@@ -1104,15 +1104,17 @@ public class CopyTool
 
 		// how much time for current inserted records?
 		float timePerRecord = (float) (totalTime / 1000) / (float) insertCount;
-
-		long timeLeft = Float.valueOf((rowCount - insertCount) * timePerRecord).longValue();
-
-		LOG.info("Records " + action);
+		
+		LOG.info("Records {}", action);
+		
+		long timeLeft = Float.valueOf((rowCount - insertCount) * timePerRecord).longValue();			
 		float perc = ((float) insertCount / (float) rowCount) * 100;
-		LOG.info("Progress: " + insertCount + " out of " + rowCount + " ("
-			+ formatPerc.format(perc) + "%)");
-		LOG.info("Time: " + (totalTime / 1000) + " seconds spent; estimated time left is "
-			+ timeLeft + " seconds");
+		
+		LOG.info("Progress: {} out of {} ({}%)", insertCount, rowCount, formatPerc.format(perc));
+		LOG.info("Time: {} seconds spent; estimated time left is {} seconds", (totalTime / 1000), timeLeft);
+		
+		
+
 	}
 	
 	private void loadDatabaseDrivers () throws ClassNotFoundException
