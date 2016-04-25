@@ -734,6 +734,13 @@ public class CopyToolConfig
 		return sourceDatabases;
 	}
 	
+	/**
+	 * Method to read a query file from disk into a String. Returns null and logs an error when
+	 * an IOException (e.g. file not found) occurs when trying to read the file.
+	 * 
+	 * @param filePath
+	 * @return contents of query file
+	 */
 	private String readQueryFile(String filePath)
 	{
 		try {
@@ -893,7 +900,7 @@ public class CopyToolConfig
 			// check if table has a from table name or a custom from query
 			if (StringUtils.isEmpty(table.getFromName()) && StringUtils.isEmpty(table.getFromQuery()))
 			{
-				LOG.error("Configuration for '" + id + "' is missing name of from table and has no custom from query");
+				LOG.error("Configuration for '" + id + "' has no 'from table' and no custom 'from query'");
 				missingNames.add(id);
 				iter.remove();
 				continue;
