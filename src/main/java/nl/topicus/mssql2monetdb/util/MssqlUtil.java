@@ -29,7 +29,7 @@ public class MssqlUtil
 				CopyToolConnectionManager.getInstance().getMssqlConnection(table.getSource()).createStatement();
 			// get number of rows in table
 			ResultSet resultSet =
-				selectStmt.executeQuery("SELECT COUNT(*) FROM [" + table.getFromName() + "]");
+				selectStmt.executeQuery(table.generateCountQuery());
 			resultSet.next();
 			long rowCount = resultSet.getLong(1);
 			resultSet.close();

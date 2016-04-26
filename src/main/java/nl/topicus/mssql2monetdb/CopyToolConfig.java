@@ -3,6 +3,8 @@ package nl.topicus.mssql2monetdb;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -731,6 +733,24 @@ public class CopyToolConfig
 		
 		return sourceDatabases;
 	}
+	
+	/**
+	 * Method to read a query file from disk into a String. Returns null and logs an error when
+	 * an IOException (e.g. file not found) occurs when trying to read the file.
+	 * 
+	 * @param filePath
+	 * @return contents of query file
+	 */
+	private String readQueryFile(String filePath)
+	{
+		try {
+			return new String(Files.readAllBytes(Paths.get(filePath)));
+		} catch (IOException e) {
+			LOG.error("Unable to read query file {} due to: {}", filePath, e.getMessage());
+		}
+		
+		return null;
+	}
 
 	private HashMap<String, CopyTable> findTablesToCopy(Properties config)
 	{
@@ -744,7 +764,7 @@ public class CopyToolConfig
 
 			String[] split = propName.split("\\.");
 
-			if (split.length != 3)
+			if (split.length < 3)
 				continue;
 
 			if (split[0].equals("table") == false)
@@ -752,6 +772,12 @@ public class CopyToolConfig
 
 			String id = split[1];
 			String key = split[2].toLowerCase();
+			
+			String subKey = null;
+			if (split.length > 3)
+			{
+				subKey = split[3].toLowerCase();
+			}
 
 			CopyTable table = tablesToCopy.get(id);
 			
@@ -768,7 +794,37 @@ public class CopyToolConfig
 			}
 			else if (key.equals("from"))
 			{
-				table.setFromName(propValue);
+				if (StringUtils.isEmpty(subKey))
+				{
+					table.setFromName(propValue);
+				} 
+				else
+				{
+					switch(subKey)
+					{
+						case "table":
+							table.setFromName(propValue);
+							break;
+						case "columns":
+							table.setFromColumns(propValue);
+							break;
+						case "query":
+							table.setFromQuery(propValue);
+							break;
+						case "queryfile":
+							table.setFromQuery(readQueryFile(propValue));
+							break;
+						case "countquery":
+							table.setFromCountQuery(propValue);
+							break;
+						case "countqueryfile":
+							table.setFromCountQuery(readQueryFile(propValue));
+							break;
+						default:
+							LOG.warn("Unknown 'from' option '{}'", subKey);
+							break;
+					}					
+				}
 			}
 			else if (key.equals("to"))
 			{
@@ -841,16 +897,32 @@ public class CopyToolConfig
 				continue;
 			}
 
-			if (StringUtils.isEmpty(table.getFromName()))
+			// check if table has a from table name or a custom from query
+			if (StringUtils.isEmpty(table.getFromName()) && StringUtils.isEmpty(table.getFromQuery()))
 			{
-				LOG.error("Configuration for '" + id + "' is missing name of from table");
+				LOG.error("Configuration for '" + id + "' has no 'from table' and no custom 'from query'");
 				missingNames.add(id);
 				iter.remove();
 				continue;
 			}
-
-			if (StringUtils.isEmpty(table.getCurrentTable().getNameWithPrefixes()))
+			
+			// check if table has a custom from query but not a related a count query
+			if (StringUtils.isNotEmpty(table.getFromQuery()) && StringUtils.isEmpty(table.getFromCountQuery()))
 			{
+				LOG.error("Configuration for '{}' has a custom from query but is missing the related countquery config property", id);
+				iter.remove();
+				continue;
+			}
+
+			if (StringUtils.isEmpty(table.getCurrentTable().getName()))
+			{
+				if (StringUtils.isEmpty(table.getFromName()))
+				{
+					LOG.error("Configuration for '{}' is missing name of to table and name of source table not available", id);
+					iter.remove();
+					continue;
+				}
+				
 				LOG.warn("Configuration for '" + id
 					+ "' is missing name of to table. Using name of from table ("
 					+ table.getFromName() + ")");
@@ -916,13 +988,13 @@ public class CopyToolConfig
 		{
 			LOG.info("The following tables will be copied: ");
 			for (CopyTable table : tablesToCopy.values())
-			{
-				LOG.info(String.format(
-					"* %s -> %s.%s",
-					table.getFromName(),
+			{				
+				LOG.info(
+					"* {} -> {}.{}",
+					table.getDescription(),
 					table.getCurrentTable().getCopyTable().getSchema(),
 					table.getCurrentTable().getName()
-				));
+				);
 			}
 		}
 
