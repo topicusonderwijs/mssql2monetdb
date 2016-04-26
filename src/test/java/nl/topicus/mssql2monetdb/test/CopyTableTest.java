@@ -1,6 +1,5 @@
 package nl.topicus.mssql2monetdb.test;
 
-import static org.junit.Assert.*;
 import nl.topicus.mssql2monetdb.CopyTable;
 
 import org.junit.Assert;
@@ -19,9 +18,8 @@ public class CopyTableTest {
 		table.setFromName(null);
 		
 		// test a custom count query
-		String customCountQuery = "SELECT COUNT(*) FROM myQuery WHERE bla = 'something'";
-		table.setFromCountQuery(customCountQuery);		
-		Assert.assertEquals(table.generateCountQuery(), customCountQuery);	
+		table.setFromCountQuery("SELECT COUNT(*) FROM myQuery WHERE bla = 'something'");		
+		Assert.assertEquals(table.generateCountQuery(), "SELECT COUNT(*) FROM myQuery WHERE bla = 'something'");	
 	}
 	
 	@Test
@@ -40,9 +38,8 @@ public class CopyTableTest {
 		table.setFromColumns(null);
 		
 		// test custom select query
-		String query = "SELECT col1, col2 FROM myQuery WHERE bla = 'something'";
-		table.setFromQuery(query);
-		Assert.assertEquals(table.generateSelectQuery(), query);
+		table.setFromQuery("SELECT col1, col2 FROM myQuery WHERE bla = 'something'");
+		Assert.assertEquals(table.generateSelectQuery(), "SELECT col1, col2 FROM myQuery WHERE bla = 'something'");
 	}
 
 }
