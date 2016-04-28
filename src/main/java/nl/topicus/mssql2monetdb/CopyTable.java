@@ -159,7 +159,7 @@ public class CopyTable
 	
 	public String getTempFilePrefix ()
 	{
-		return "table_" + this.source + "_" + this.fromName;
+		return "table_" + this.source + "_" + this.getToName();
 	}
 
 	public List<MonetDBTable> getMonetDBTables()
