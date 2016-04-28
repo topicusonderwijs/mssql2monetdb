@@ -23,7 +23,7 @@ do
 			# run tool with config
 			echo "Running MSSQL2MonetDB tool with config file: $CONFIG"
 			echo "========================="
-			java -jar mssql2monetdb-$TOOL_VERSION.jar -c "$CONFIG" $SWITCH_FLAG
+			java -cp "/mssql2monetdb/*" -Dlog4j.configuration=file:"/mssql2monetdb/log4j.properties" nl.topicus.mssql2monetdb.CopyTool -c "$CONFIG" $SWITCH_FLAG
 			echo "========================="
 		fi
 	fi

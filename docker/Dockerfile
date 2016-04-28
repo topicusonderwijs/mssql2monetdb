@@ -8,12 +8,17 @@ VOLUME ["/logs"]
 # set entrypoint to shell script
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
+RUN mkdir /mssql2monetdb
+
 # Add MSSQL2MonetDB jar file
 ENV TOOL_VERSION 1.3
-ADD https://github.com/topicus-ini/mssql2monetdb/releases/download/$TOOL_VERSION/mssql2monetdb-$TOOL_VERSION-jar-with-dependencies.jar /mssql2monetdb-$TOOL_VERSION.jar
+ADD https://github.com/topicus-ini/mssql2monetdb/releases/download/$TOOL_VERSION/mssql2monetdb-$TOOL_VERSION-jar-with-dependencies.jar /mssql2monetdb/mssql2monetdb-$TOOL_VERSION.jar
+
+ADD http://central.maven.org/maven2/log4j/log4j/1.2.17/log4j-1.2.17.jar /mssql2monetdb/
+ADD http://central.maven.org/maven2/org/slf4j/slf4j-log4j12/1.7.21/slf4j-log4j12-1.7.21.jar /mssql2monetdb/
 
 # Copy logging config file
-COPY log4j.properties /log4j.properties
+COPY log4j.properties /mssql2monetdb/log4j.properties
 
 # copy entrpoint Bash shell script
 WORKDIR /

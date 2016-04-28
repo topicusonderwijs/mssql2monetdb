@@ -743,6 +743,20 @@ public class CopyToolConfig
 	 */
 	private String readQueryFile(String filePath)
 	{
+		File queryFile = new File(filePath);
+		
+		if (!queryFile.exists())
+		{
+			LOG.error("Unable to read query file '{}': file does not exist", filePath);
+			return null;
+		}
+		
+		if (queryFile.isDirectory())
+		{
+			LOG.error("Unable to read query file '{}': is a directory", filePath);
+			return null;
+		}
+		
 		try {
 			return new String(Files.readAllBytes(Paths.get(filePath)));
 		} catch (IOException e) {
