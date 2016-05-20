@@ -801,93 +801,90 @@ public class CopyToolConfig
 				table = new CopyTable();
 				table.getMonetDBTables().add(new MonetDBTable(table));
 			}
-
-			if (key.equals("source"))
+			
+			switch(key)
 			{
-				table.setSource(propValue);
-			}
-			else if (key.equals("from"))
-			{
-				if (StringUtils.isEmpty(subKey))
-				{
-					table.setFromName(propValue);
-				} 
-				else
-				{
-					switch(subKey)
+				case "source":
+					table.setSource(propValue);
+					break;
+				case "from":
+					if (StringUtils.isEmpty(subKey))
 					{
-						case "table":
-							table.setFromName(propValue);
-							break;
-						case "columns":
-							table.setFromColumns(propValue);
-							break;
-						case "query":
-							table.setFromQuery(propValue);
-							break;
-						case "queryfile":
-							table.setFromQuery(readQueryFile(propValue));
-							break;
-						case "countquery":
-							table.setFromCountQuery(propValue);
-							break;
-						case "countqueryfile":
-							table.setFromCountQuery(readQueryFile(propValue));
-							break;
-						default:
-							LOG.warn("Unknown 'from' option '{}'", subKey);
-							break;
-					}					
-				}
-			}
-			else if (key.equals("to"))
-			{
-				table.setToName(propValue.toLowerCase());
-				table.getCurrentTable().setName(propValue.toLowerCase());
-			}
-			else if (key.equals("schema"))
-			{
-				table.setSchema(propValue);
-			}
-			else if (key.equals("create"))
-			{
-				table.setCreate(boolValue);
-			}
-			else if (key.equals("truncate"))
-			{
-				table.setTruncate(boolValue);
-			}
-			else if (key.equals("drop"))
-			{
-				table.setDrop(boolValue);
-			}
-			else if (key.equals("copyviatemptable"))
-			{
-				table.setCopyViaTempTable(boolValue);
-			}
-			else if (key.equals("temptableprefix"))
-			{
-				table.setTempTablePrefix(propValue);
-			}
-			else if (key.equals("usefastviewswitching"))
-			{
-				table.setUseFastViewSwitching(boolValue);
-			}
-			else if (key.equals("uselockedmode"))
-			{
-				table.setUseLockedMode(boolValue);
-			}
-			else if (key.equals("copymethod"))
-			{
-				propValue = propValue.toLowerCase();
-				if (propValue.equals("copyinto"))
-				{
-					table.setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
-				}
-				else if (propValue.startsWith("insert"))
-				{
-					table.setCopyMethod(CopyTable.COPY_METHOD_INSERT);
-				}
+						table.setFromName(propValue);
+					} 
+					else
+					{
+						switch(subKey)
+						{
+							case "table":
+								table.setFromName(propValue);
+								break;
+							case "columns":
+								table.setFromColumns(propValue);
+								break;
+							case "query":
+								table.setFromQuery(propValue);
+								break;
+							case "queryfile":
+								table.setFromQuery(readQueryFile(propValue));
+								break;
+							case "countquery":
+								table.setFromCountQuery(propValue);
+								break;
+							case "countqueryfile":
+								table.setFromCountQuery(readQueryFile(propValue));
+								break;
+							default:
+								LOG.warn("Unknown 'from' option '{}'", subKey);
+								break;
+						}					
+					}
+					break;
+				case "to":
+					table.setToName(propValue.toLowerCase());
+					table.getCurrentTable().setName(propValue.toLowerCase());
+					break;
+				case "schema":
+					table.setSchema(propValue);
+					break;
+				case "create":
+					table.setCreate(boolValue);
+					break;
+				case "truncate":
+					table.setTruncate(boolValue);
+					break;
+				case "drop":
+					table.setDrop(boolValue);
+					break;
+				case "copyviatemptable":
+					table.setCopyViaTempTable(boolValue);
+					break;
+				case "temptableprefix":
+					table.setTempTablePrefix(propValue);
+					break;
+				case "usefastviewswitching":
+					table.setUseFastViewSwitching(boolValue);
+					break;
+				case "uselockedmode":
+					table.setUseLockedMode(boolValue);
+					break;
+				case "allowempty":
+					table.setAllowEmpty(boolValue);
+					break;
+				case "copymethod":
+					propValue = propValue.toLowerCase();
+					if (propValue.equals("copyinto"))
+					{
+						table.setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
+					}
+					else if (propValue.startsWith("insert"))
+					{
+						table.setCopyMethod(CopyTable.COPY_METHOD_INSERT);
+					}
+					break;
+				default:
+					LOG.warn("Unknown option: '{}'", key);
+					break;
 			}
 
 			tablesToCopy.put(id, table);

@@ -65,6 +65,9 @@ public class CopyTable
 	// this will do COPY INTO with LOCKED MODE
 	private boolean useLockedMode = false;
 	
+	// determines when or not a copy job should allow this table to be empty or not
+	private boolean allowEmpty = true;
+	
 	private String loadDate;
 	
 	public void setLoadDate(String loadDateStr)
@@ -316,5 +319,13 @@ public class CopyTable
 		} else {
 			return getFromQuery();
 		}
+	}
+
+	public boolean isAllowEmpty() {
+		return allowEmpty;
+	}
+
+	public void setAllowEmpty(boolean allowEmpty) {
+		this.allowEmpty = allowEmpty;
 	}
 }

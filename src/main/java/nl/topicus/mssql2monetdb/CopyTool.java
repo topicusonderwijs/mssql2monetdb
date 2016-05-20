@@ -615,6 +615,15 @@ public class CopyTool
 		metaDataFile.delete();
 	}
 	
+	private void writeInsertCountFile (String tmpDir, String tmpFilePrefix, long insertCount) throws IOException
+	{
+		File countFile = new File(tmpDir, tmpFilePrefix + "_count.txt");
+		Writer wr = new FileWriter(countFile);
+		wr.write(String.valueOf(insertCount));
+		wr.close();
+		LOG.info("Written row count to temp file: " + countFile.getAbsolutePath());
+	}
+	
 	/**
 	 * Copies data from a MSSQL table to local disk, including meta data and row count.
 	 * @throws SQLException 
@@ -655,6 +664,14 @@ public class CopyTool
 		out.close();
 		fileOut.close();
 		LOG.info("Serialized metadata to temp file: " + metaDataFile.getAbsolutePath());
+	
+		
+		if (rowCount == 0)
+		{
+			writeInsertCountFile(tmpDir, tmpFilePrefix, 0L);
+			LOG.info("Finished copying data of '{}' to disk (no data to copy)", table.getDescription());
+			return;
+		}
 		
 		// write data to disk
 		File temp = new File(tmpDir, tmpFilePrefix + "_data.csv");		
@@ -712,12 +729,7 @@ public class CopyTool
 		bw.close();
 		printInsertProgress(startTime, insertCount, rowCount, "written to disk");
 		
-		// write insert count to disk as well
-		File countFile = new File(tmpDir, tmpFilePrefix + "_count.txt");
-		Writer wr = new FileWriter(countFile);
-		wr.write(String.valueOf(insertCount));
-		wr.close();
-		LOG.info("Written row count to temp file: " + countFile.getAbsolutePath());
+		writeInsertCountFile(tmpDir, tmpFilePrefix, insertCount);
 		
 		LOG.info("Finished copying data of '" + table.getDescription() + "' to disk!");
 	}
@@ -735,11 +747,6 @@ public class CopyTool
 		File dataFile = new File(config.getTempDirectory(), table.getTempFilePrefix() + "_data.csv");
 		File countFile = new File(config.getTempDirectory(), table.getTempFilePrefix() + "_count.txt");
 		File metaDataFile = new File(config.getTempDirectory(), table.getTempFilePrefix() + "_metadata.ser");
-		
-		if (!dataFile.exists())
-		{
-			throw new Exception("Missing temporary data file for '" + table.getDescription() + "'");
-		}
 		
 		if (!countFile.exists())
 		{
@@ -791,6 +798,19 @@ public class CopyTool
 		if (table.truncate())
 		{
 			MonetDBUtil.truncateMonetDBTable(copyToTable);
+		}
+		
+		// no records to insert? then this method is done
+		if (insertCount == 0)
+		{
+			LOG.info("Finished loading data into '{}': no data to load", copyToTable.getName());
+			return;
+		}
+		
+		// verify data file exists
+		if (!dataFile.exists())
+		{
+			throw new Exception("Missing temporary data file for '" + table.getDescription() + "'");
 		}
 		
 		// load data
