@@ -881,7 +881,7 @@ public class CopyToolConfig
 					{
 						table.setCopyMethod(CopyTable.COPY_METHOD_INSERT);
 					}
-				
+					break;
 				default:
 					LOG.warn("Unknown option: '{}'", key);
 					break;
