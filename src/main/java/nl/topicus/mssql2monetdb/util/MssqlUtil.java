@@ -36,8 +36,15 @@ public class MssqlUtil
 
 			if (rowCount == 0)
 			{
-				LOG.error(table.getFromName() + " is empty! Stopping all copy actions!");
-				return false;
+				if (table.isAllowEmpty())
+				{
+					LOG.warn("{} is empty", table.getDescription());
+				}
+				else
+				{
+					LOG.error("{} is empty! Stopping all copy actions!", table.getDescription());
+					return false;
+				}
 			}
 		}
 	

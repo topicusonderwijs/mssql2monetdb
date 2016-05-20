@@ -877,6 +877,10 @@ public class CopyToolConfig
 			{
 				table.setUseLockedMode(boolValue);
 			}
+			else if (key.equals("allowempty"))
+			{
+				table.setAllowEmpty(boolValue);
+			}
 			else if (key.equals("copymethod"))
 			{
 				propValue = propValue.toLowerCase();
