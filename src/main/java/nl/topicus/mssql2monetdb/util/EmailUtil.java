@@ -10,8 +10,8 @@ import javax.mail.Transport;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
 
-import nl.topicus.mssql2monetdb.CONFIG_KEYS;
-import nl.topicus.mssql2monetdb.CopyToolConfig;
+import nl.topicus.mssql2monetdb.tool.CONFIG_KEYS;
+import nl.topicus.mssql2monetdb.tool.CopyToolConfig;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;

@@ -1,6 +1,6 @@
 package nl.topicus.mssql2monetdb.test;
 
-import nl.topicus.mssql2monetdb.CopyTable;
+import nl.topicus.mssql2monetdb.tool.CopyTable;
 
 import org.junit.Assert;
 import org.junit.Test;

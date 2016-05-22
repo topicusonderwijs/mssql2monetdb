@@ -5,8 +5,8 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
 
-import nl.topicus.mssql2monetdb.CopyTable;
-import nl.topicus.mssql2monetdb.CopyToolConnectionManager;
+import nl.topicus.mssql2monetdb.tool.CopyTable;
+import nl.topicus.mssql2monetdb.tool.CopyToolConnectionManager;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

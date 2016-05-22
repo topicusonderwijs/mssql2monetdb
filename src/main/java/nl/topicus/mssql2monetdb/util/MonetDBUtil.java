@@ -11,9 +11,9 @@ import java.util.HashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import nl.topicus.mssql2monetdb.CopyTable;
-import nl.topicus.mssql2monetdb.CopyToolConnectionManager;
-import nl.topicus.mssql2monetdb.MonetDBTable;
+import nl.topicus.mssql2monetdb.tool.CopyTable;
+import nl.topicus.mssql2monetdb.tool.CopyToolConnectionManager;
+import nl.topicus.mssql2monetdb.tool.MonetDBTable;
 
 public class MonetDBUtil
 {

@@ -1,4 +1,4 @@
-package nl.topicus.mssql2monetdb;
+package nl.topicus.mssql2monetdb.tool;
 
 import java.util.ArrayList;
 import java.util.List;
