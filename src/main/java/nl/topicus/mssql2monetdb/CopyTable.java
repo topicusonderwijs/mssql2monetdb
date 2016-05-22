@@ -66,7 +66,7 @@ public class CopyTable
 	private boolean useLockedMode = false;
 	
 	// determines when or not a copy job should allow this table to be empty or not
-	private boolean allowEmpty = true;
+	private boolean allowEmpty = false;
 	
 	private String loadDate;
 	
