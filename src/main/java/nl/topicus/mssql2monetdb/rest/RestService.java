@@ -7,7 +7,7 @@ public class RestService {
 		RestService service = new RestService();
 		
 		try {
-			service.run();
+			service.run(args);
 		} catch (Exception e) {
 			System.err.println("ERROR: " + e.getMessage());
 			e.printStackTrace();
@@ -15,9 +15,11 @@ public class RestService {
 		}	
 	}
 	
-	public void run () throws Exception {
+	public void run (String[] args) throws Exception {
+		RestConfig conf = new RestConfig(args);
+		
 		// set port of REST service
-		Spark.port(4567);		
+		Spark.port(conf.getPort());		
 		
 		// index page
 		Spark.get("/", (request, response) -> {
