@@ -19,7 +19,9 @@ public class RestService {
 		RestConfig conf = new RestConfig(args);
 		
 		// set port of REST service
-		Spark.port(conf.getPort());		
+		Spark.port(conf.getPort());	
+		
+		Spark.before(new AuthFilter(conf));
 		
 		// index page
 		Spark.get("/", (request, response) -> {
@@ -31,7 +33,7 @@ public class RestService {
 		Spark.post("/status", new StatusRoute());
 		
 		// setup run endpoint
-		Spark.post("/run/:config", new RunRoute());
+		Spark.post("/run/:config", new RunRoute(conf));
 		Spark.get("/run/:config", (request, response) -> {
 			return "<h1>This URI only accepts a POST request</h1>";
 		});

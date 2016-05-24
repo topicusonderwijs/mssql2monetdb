@@ -1,5 +1,7 @@
 package nl.topicus.mssql2monetdb.rest;
 
+import java.io.File;
+
 import nl.topicus.mssql2monetdb.tool.ConfigException;
 
 import org.apache.commons.cli.BasicParser;
@@ -17,9 +19,13 @@ public class RestConfig {
 	
 	private CommandLine cmd;
 	
-	private String configPath;
+	private File configPath;
 	
 	private int port;
+	
+	private String user;
+	
+	private String password;
 	
 	public RestConfig (String[] args) throws ConfigException
 	{
@@ -36,6 +42,18 @@ public class RestConfig {
 		OptionBuilder.withDescription("Specify the port of the REST service");
 		OptionBuilder.withLongOpt("port");
 		options.addOption(OptionBuilder.create("P"));
+		
+		OptionBuilder.hasArg(true);
+		OptionBuilder.isRequired(false);
+		OptionBuilder.withDescription("Specify an optional user for the REST service");
+		OptionBuilder.withLongOpt("user");
+		options.addOption(OptionBuilder.create("u"));
+		
+		OptionBuilder.hasArg(true);
+		OptionBuilder.isRequired(false);
+		OptionBuilder.withDescription("Specify an optional password for the REST service");
+		OptionBuilder.withLongOpt("password");
+		options.addOption(OptionBuilder.create("up"));
 		
 		CommandLineParser parser = new BasicParser();
 		try
@@ -60,14 +78,27 @@ public class RestConfig {
 		initConfig();
 	}
 	
-	private void initConfig () {
+	private void initConfig () throws ConfigException {
 		this.port = getConfigValueAsInt("port", 4567);
-		this.configPath = getConfigValue("configpath");
+		this.user = getConfigValue("user", false);
+		this.password = getConfigValue("password", false);
+		
+		initConfigPath();
 	}
 	
-	private int getConfigValueAsInt (String prop, int defaultValue)
+	private void initConfigPath () throws ConfigException {
+		setConfigPath(getConfigValue("configpath", true));
+		
+		if (!configPath.exists())
+			throw new ConfigException("Configpath '%s' does not exist", configPath.getAbsolutePath());
+		
+		if (!configPath.isDirectory())
+			throw new ConfigException("Configpath '%s' is not a directory", configPath.getAbsolutePath());
+	}
+	
+	private int getConfigValueAsInt (String prop, int defaultValue) throws ConfigException
 	{
-		String value = getConfigValue(prop);
+		String value = getConfigValue(prop, false);
 		
 		if (value == null)
 			return defaultValue;
@@ -80,7 +111,7 @@ public class RestConfig {
 		}
 	}
 	
-	private String getConfigValue (String prop)
+	private String getConfigValue (String prop, boolean isRequired) throws ConfigException
 	{
 		if (cmd.hasOption(prop))
 			return cmd.getOptionValue(prop);
@@ -91,15 +122,20 @@ public class RestConfig {
 			return value;
 		
 		value = System.getenv("MSSQL2MONETDB_REST_" + prop.toUpperCase());
+		
+		if (value == null && isRequired) {
+			throw new ConfigException("Missing configuration option '" + prop + "'");
+		}
+		
 		return value;
 	}
 
-	public String getConfigPath() {
+	public File getConfigPath() {
 		return configPath;
 	}
 
-	public void setConfigPath(String configPath) {
-		this.configPath = configPath;
+	public void setConfigPath(String configPathStr) {
+		this.configPath = new File(configPathStr);
 	}
 
 	public int getPort() {
@@ -108,5 +144,21 @@ public class RestConfig {
 
 	public void setPort(int port) {
 		this.port = port;
+	}
+
+	public String getPassword() {
+		return password;
+	}
+
+	public void setPassword(String password) {
+		this.password = password;
+	}
+
+	public String getUser() {
+		return user;
+	}
+
+	public void setUser(String user) {
+		this.user = user;
 	}
 }
