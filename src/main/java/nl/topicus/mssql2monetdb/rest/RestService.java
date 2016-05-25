@@ -21,6 +21,7 @@ public class RestService {
 		// set port of REST service
 		Spark.port(conf.getPort());	
 		
+		Spark.before(new RequestLogFilter());
 		Spark.before(new AuthFilter(conf));
 		
 		// index page

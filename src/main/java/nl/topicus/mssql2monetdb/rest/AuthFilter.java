@@ -34,6 +34,7 @@ public class AuthFilter implements Filter {
 			return;
 		
 		if (!isAuthenticated (request)) {
+			LOG.info("Request not authenticated");
 			response.header("WWW-Authenticate", "Basic realm=\"This REST service requires a username and/or password\"");
 			Spark.halt(401, "This REST service requires a username and password.");	
 		}
@@ -57,7 +58,10 @@ public class AuthFilter implements Filter {
 			return false;
 		
 		// username and password to compare against, Base64 encoded
-		String userPass = restConf.getUser() + ":" + restConf.getPassword();
+		String userPass = String.format("%s:%s", 
+				StringUtils.isNotEmpty(restConf.getUser()) ? restConf.getUser() : "",
+				StringUtils.isNotEmpty(restConf.getPassword()) ? restConf.getPassword() : ""
+		);
 		String compareStr = Base64.getEncoder().encodeToString(userPass.getBytes());
 		
 		// return result of comparison
