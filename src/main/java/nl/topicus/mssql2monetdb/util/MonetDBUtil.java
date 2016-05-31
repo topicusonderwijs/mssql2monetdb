@@ -44,11 +44,11 @@ public class MonetDBUtil
 				CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement())
 		{
 			ResultSet result =
-				q.executeQuery("SELECT name FROM sys.tables WHERE name = '" + name
-					+ "' AND schema_id = (SELECT id FROM sys.schemas WHERE name = '" + schema
-					+ "')");
+				q.executeQuery("SELECT name FROM sys.tables WHERE name = " + quoteMonetDbValue(name)
+					+ " AND schema_id = (SELECT id FROM sys.schemas WHERE name = " + quoteMonetDbValue(schema)
+					+ ")");
 			
-			boolean ret = result.next();
+			boolean ret = result.next();			
 			result.close();
 			
 			// is true if rows exists, otherwise it is false

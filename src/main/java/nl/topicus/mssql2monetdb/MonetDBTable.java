@@ -30,12 +30,16 @@ public class MonetDBTable
 	 */
 	public String getNameWithPrefixes()
 	{
-		if (tempTable)
-			return copyTable.getTempTablePrefix() + name;
-		else if (copyTable.isUseFastViewSwitching())
-			return name + "_" + copyTable.getLoadDate();
+		String ret;
 		
-		return name;
+		if (tempTable)
+			ret = copyTable.getTempTablePrefix() + name;
+		else if (copyTable.isUseFastViewSwitching())
+			ret = name + "_" + copyTable.getLoadDate();
+		else
+			ret = name;
+		
+		return ret.toLowerCase();
 	}
 
 	public String getName()
@@ -45,7 +49,7 @@ public class MonetDBTable
 
 	public void setName(String name)
 	{
-		this.name = name;
+		this.name = name.toLowerCase();
 	}
 
 	public boolean isTempTable()
