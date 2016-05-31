@@ -30,7 +30,7 @@ public class CopyTable
 
 	private boolean create = true;
 
-	private boolean drop = false;
+	private boolean drop = true;
 	
 	private String source;
 
@@ -60,10 +60,10 @@ public class CopyTable
 	// a backup table this will make it possible to switch the underlying table of the
 	// view when data copying is complete resulting in almost no down-time of your
 	// database table
-	private boolean useFastViewSwitching = false;
+	private boolean useFastViewSwitching = true;
 	
 	// this will do COPY INTO with LOCKED MODE
-	private boolean useLockedMode = false;
+	private boolean useLockedMode = true;
 	
 	// determines when or not a copy job should allow this table to be empty or not
 	private boolean allowEmpty = false;
