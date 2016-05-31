@@ -766,7 +766,7 @@ public class CopyToolConfig
 		return null;
 	}
 
-	private HashMap<String, CopyTable> findTablesToCopy(Properties config)
+	private HashMap<String, CopyTable> findTablesToCopy(Properties config) throws ConfigException
 	{
 		HashMap<String, CopyTable> tablesToCopy = new HashMap<String, CopyTable>();
 		for (Entry<Object, Object> entry : config.entrySet())
@@ -934,11 +934,11 @@ public class CopyToolConfig
 					continue;
 				}
 				
-				LOG.warn("Configuration for '" + id
+				LOG.info("Configuration for '" + id
 					+ "' is missing name of to table. Using name of from table ("
 					+ table.getFromName() + ")");
-				table.getCurrentTable().setName(table.getFromName());
-				table.setToName(table.getFromName());
+				table.getCurrentTable().setName(table.getFromName().toLowerCase());
+				table.setToName(table.getFromName().toLowerCase());
 			}
 			
 			// if no source database has been specified then the default source
@@ -982,18 +982,17 @@ public class CopyToolConfig
 
 		if(!missingResultTables.isEmpty())
 		{
-			EmailUtil.sendMail("Configuration is missing a result table: " + missingResultTables.toString(), "Configuration is missing a result table in monetdb", config);
+			LOG.error("Configuration is missing a result table: {}", missingResultTables.toString());
 		}
 		
 		if(!missingNames.isEmpty())
 		{
-			EmailUtil.sendMail("Configuration is missing name of from table : " + missingNames.toString(), "Configuration is missing name of from table in monetdb", config);
+			LOG.error("Configuration is missing name of from table: {}", missingNames.toString());
 		}
 
 		if (tablesToCopy.size() == 0)
 		{
-			LOG.error("Configuration has specified NO tables to copy!");
-			EmailUtil.sendMail("Configuration has specified NO tables to copy!", "Configuration has specified NO tables to copy in monetdb", config);
+			throw new ConfigException("Configuration has specified NO tables to copy!");
 		}
 		else
 		{
