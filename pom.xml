@@ -111,6 +111,7 @@
 		      	<artifactId>docker-maven-plugin</artifactId>
 		      	<version>0.4.10</version>
 		      	<configuration>
+		      		<serverId>docker-hub</serverId>
 		        	<imageName>dennisp/mssql2monetdb</imageName>
 		        	<dockerDirectory>docker</dockerDirectory>
 		        	<!-- copy the service's jar file from target into the root directory of the image --> 
