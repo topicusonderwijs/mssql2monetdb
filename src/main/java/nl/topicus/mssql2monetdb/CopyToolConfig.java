@@ -325,6 +325,12 @@ public class CopyToolConfig
 		
 		if (StringUtils.isEmpty(envValue))
 		{
+			envValue = System.getProperty(envVar);
+		}
+			
+			
+		if (StringUtils.isEmpty(envValue))
+			{	
 			if (!StringUtils.isEmpty(key))
 			{
 				if (StringUtils.isEmpty(defaultValue))
