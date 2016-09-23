@@ -18,6 +18,32 @@ import nl.topicus.mssql2monetdb.MonetDBTable;
 public class MonetDBUtil
 {
 	private static final Logger LOG = LoggerFactory.getLogger(MonetDBUtil.class);
+	
+	public static HashMap<Integer, String> sqlTypes;
+	static {
+		sqlTypes = new HashMap<>();
+		sqlTypes.put(Types.BIGINT, "bigint");
+		sqlTypes.put(Types.BLOB, "blob");
+		sqlTypes.put(Types.BOOLEAN, "boolean");
+		sqlTypes.put(Types.CHAR, "char");
+		sqlTypes.put(Types.CLOB, "clob");
+		sqlTypes.put(Types.DATE, "date");
+		sqlTypes.put(Types.DECIMAL, "decimal");
+		sqlTypes.put(Types.DOUBLE, "double");
+		sqlTypes.put(Types.FLOAT, "float");
+		sqlTypes.put(Types.INTEGER, "int");
+		sqlTypes.put(Types.NCHAR, "char");
+		sqlTypes.put(Types.NCLOB, "clob");
+		sqlTypes.put(Types.NUMERIC, "numeric");
+		sqlTypes.put(Types.NVARCHAR, "varchar");
+		sqlTypes.put(Types.REAL, "real");
+		sqlTypes.put(Types.SMALLINT, "smallint");
+		sqlTypes.put(Types.TIME, "time");
+		sqlTypes.put(Types.TIMESTAMP, "timestamp");
+		sqlTypes.put(Types.TINYINT, "tinyint");
+		sqlTypes.put(Types.VARCHAR, "varchar");
+		sqlTypes.put(Types.BIT, "boolean");
+	}	
 
 	/**
 	 * Check if a table exists in MonetDB by selecting and catching the
@@ -188,43 +214,9 @@ public class MonetDBUtil
 			monetDBTable.getCopyTable().setCopyMethod(CopyTable.COPY_METHOD_COPYINTO);
 		}
 	}
-
-	/**
-	 * Creates a SQL command for creating a column based on table meta data and column
-	 * index.
-	 */
-	public static String createColumnSql(int colIndex, ResultSetMetaData metaData)
-			throws SQLException
+	
+	public static String getMonetDbColumnType(int colIndex, ResultSetMetaData metaData) throws SQLException
 	{
-		StringBuilder createSql = new StringBuilder();
-
-		createSql.append(MonetDBUtil.quoteMonetDbIdentifier(metaData.getColumnName(colIndex)
-			.toLowerCase()));
-		createSql.append(" ");
-
-		HashMap<Integer, String> sqlTypes = new HashMap<Integer, String>();
-		sqlTypes.put(Types.BIGINT, "bigint");
-		sqlTypes.put(Types.BLOB, "blob");
-		sqlTypes.put(Types.BOOLEAN, "boolean");
-		sqlTypes.put(Types.CHAR, "char");
-		sqlTypes.put(Types.CLOB, "clob");
-		sqlTypes.put(Types.DATE, "date");
-		sqlTypes.put(Types.DECIMAL, "decimal");
-		sqlTypes.put(Types.DOUBLE, "double");
-		sqlTypes.put(Types.FLOAT, "float");
-		sqlTypes.put(Types.INTEGER, "int");
-		sqlTypes.put(Types.NCHAR, "char");
-		sqlTypes.put(Types.NCLOB, "clob");
-		sqlTypes.put(Types.NUMERIC, "numeric");
-		sqlTypes.put(Types.NVARCHAR, "varchar");
-		sqlTypes.put(Types.REAL, "real");
-		sqlTypes.put(Types.SMALLINT, "smallint");
-		sqlTypes.put(Types.TIME, "time");
-		sqlTypes.put(Types.TIMESTAMP, "timestamp");
-		sqlTypes.put(Types.TINYINT, "tinyint");
-		sqlTypes.put(Types.VARCHAR, "varchar");
-		sqlTypes.put(Types.BIT, "boolean");
-
 		int colType = metaData.getColumnType(colIndex);
 		String colTypeName = null;
 		if (sqlTypes.containsKey(colType))
@@ -237,7 +229,7 @@ public class MonetDBUtil
 			throw new SQLException("Unknown SQL type " + colType + " ("
 				+ metaData.getColumnTypeName(colIndex) + ")");
 		}
-
+		
 		int precision = metaData.getPrecision(colIndex);
 		int scale = metaData.getScale(colIndex);
 
@@ -261,7 +253,24 @@ public class MonetDBUtil
 				colTypeName = "bigint";
 			}
 		}
+		
+		return colTypeName;
+	}
 
+	/**
+	 * Creates a SQL command for creating a column based on table meta data and column
+	 * index.
+	 */
+	public static String createColumnSql(int colIndex, ResultSetMetaData metaData)
+			throws SQLException
+	{
+		StringBuilder createSql = new StringBuilder();
+
+		createSql.append(MonetDBUtil.quoteMonetDbIdentifier(metaData.getColumnName(colIndex)
+			.toLowerCase()));
+		createSql.append(" ");
+		
+		String colTypeName = getMonetDbColumnType(colIndex, metaData);
 		createSql.append(colTypeName);
 
 		// some types required additional info
@@ -272,6 +281,9 @@ public class MonetDBUtil
 		}
 		else if (colTypeName.equals("decimal") || colTypeName.equals("numeric"))
 		{
+			int precision = metaData.getPrecision(colIndex);
+			int scale = metaData.getScale(colIndex);
+			
 			// MonetDB doesn't support a precision higher than 18
 			if (precision > 18)
 				precision = 18;

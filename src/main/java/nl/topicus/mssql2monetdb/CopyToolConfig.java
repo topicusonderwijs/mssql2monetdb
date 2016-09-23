@@ -779,6 +779,7 @@ public class CopyToolConfig
 		{
 			String propName = entry.getKey().toString().toLowerCase();
 			String propValue = entry.getValue().toString();
+			
 			boolean boolValue =
 				(propValue.equalsIgnoreCase("true") || propValue.equalsIgnoreCase("yes"));
 
@@ -873,6 +874,9 @@ public class CopyToolConfig
 					break;
 				case "uselockedmode":
 					table.setUseLockedMode(boolValue);
+					break;
+				case "usebinarymode":
+					table.setUseBinaryMode(boolValue);
 					break;
 				case "allowempty":
 					table.setAllowEmpty(boolValue);

@@ -33,6 +33,10 @@ import java.util.regex.Pattern;
 
 import nl.cwi.monetdb.mcl.io.BufferedMCLReader;
 import nl.cwi.monetdb.mcl.io.BufferedMCLWriter;
+import nl.topicus.mssql2monetdb.copy.binary.CopyDataToBinary;
+import nl.topicus.mssql2monetdb.load.AbstractLoadData;
+import nl.topicus.mssql2monetdb.load.LoadDataFromBinary;
+import nl.topicus.mssql2monetdb.load.LoadDataFromCsv;
 import nl.topicus.mssql2monetdb.util.EmailUtil;
 import nl.topicus.mssql2monetdb.util.MonetDBUtil;
 import nl.topicus.mssql2monetdb.util.MssqlUtil;
@@ -52,7 +56,7 @@ public class CopyTool
 
 	private CopyToolConfig config;
 
-	private DecimalFormat formatPerc = new DecimalFormat("#.#");
+	private static DecimalFormat formatPerc = new DecimalFormat("#.#");
 	
 	private Object lastRunValue;
 	
@@ -674,60 +678,19 @@ public class CopyTool
 		}
 		
 		// write data to disk
-		File temp = new File(tmpDir, tmpFilePrefix + "_data.csv");		
-		LOG.info("Writing data to temp file: " + temp.getAbsolutePath());
-		
-		BufferedWriter bw = new BufferedWriter
-			    (new OutputStreamWriter(new FileOutputStream(temp), "UTF-8"));
-
-		long startTime = System.currentTimeMillis();
-		long insertCount = 0;
-		int columnCount = metaData.getColumnCount();
-		
-		while (resultSet.next())
+		if (table.isUseBinaryMode())
 		{
-			for (int i = 1; i <= columnCount; i++)
+			// check if schema matches binary load
+			if (!CopyDataToBinary.isBinarySupported(metaData))
 			{
-				Object value = resultSet.getObject(i);
-
-				if (value == null)
-				{
-					bw.write("\\N");
-				}
-				else
-				{
-					String valueStr = value.toString();
-
-					// escape \ with \\
-					valueStr = valueStr.replaceAll("\\\\", "\\\\\\\\");
-
-					// escape " with \"
-					valueStr = valueStr.replaceAll("\"", "\\\\\"");
-					
-					bw.write("\"" + valueStr + "\"");
-				}			
-
-				// column separator (not for last column)
-				if (i < columnCount)
-				{
-					bw.write(",");
-				}
-			}
-
-			// record separator
-			bw.newLine();
-
-			insertCount++;
-
-			if (insertCount % 100000 == 0)
-			{
-				bw.flush();
-				printInsertProgress(startTime, insertCount, rowCount, "written to disk");
+				LOG.warn("Binary mode not supported for table '{}'. Defaulting to CSV mode.", table.getFromName());
+				table.setUseBinaryMode(false);
 			}
 		}
-		bw.flush();
-		bw.close();
-		printInsertProgress(startTime, insertCount, rowCount, "written to disk");
+		
+		AbstractCopyData copyData =(table.isUseBinaryMode()) ? new CopyDataToBinary() :  new CopyDataToCsv();
+		copyData.setConfig(config);
+		long insertCount = copyData.copyData(table, metaData, resultSet, rowCount);
 		
 		writeInsertCountFile(tmpDir, tmpFilePrefix, insertCount);
 		
@@ -744,7 +707,6 @@ public class CopyTool
 		long startTime = System.currentTimeMillis();
 		
 		// verify all temp files are available
-		File dataFile = new File(config.getTempDirectory(), table.getTempFilePrefix() + "_data.csv");
 		File countFile = new File(config.getTempDirectory(), table.getTempFilePrefix() + "_count.txt");
 		File metaDataFile = new File(config.getTempDirectory(), table.getTempFilePrefix() + "_metadata.ser");
 		
@@ -769,10 +731,7 @@ public class CopyTool
 		} catch (NumberFormatException e) {
 			throw new Exception("Unable to read row count from temporary count file for '" + table.getDescription() + "'");
 		}
-		
-		if (insertCount == null)
-			throw new Exception("Unable to read row count from temporary count file for '" + table.getDescription() + "'");
-		
+				
 		// read metadata
 		SerializableResultSetMetaData metaData = null;
 		try {
@@ -807,257 +766,16 @@ public class CopyTool
 			return;
 		}
 		
-		// verify data file exists
-		if (!dataFile.exists())
-		{
-			throw new Exception("Missing temporary data file for '" + table.getDescription() + "'");
-		}
+		AbstractLoadData loadData = (table.isUseBinaryMode()) ? new LoadDataFromBinary() : new LoadDataFromCsv();
+		loadData.setConfig(config);
 		
-		// load data
-		boolean isLoaded = false;
+		loadData.loadData(metaData, table, copyToTable, insertCount);
 		
-		// is it allowed to use COPY INTO method?
-		if (copyToTable.getCopyTable().getCopyMethod() != CopyTable.COPY_METHOD_INSERT)
-		{
-			// try to load directly via COPY INTO FROM FILE
-			try {
-				isLoaded = loadDataFromFile(copyToTable, dataFile, metaData, insertCount, table.isUseLockedMode());
-			} catch (SQLException e) {
-				LOG.warn("Failed to load data directly from file: " + e.getMessage());
-			}
-					
-			// not loaded? then try loading via COPY INTO FROM STDIN
-			if (!isLoaded)
-			{
-				try {
-					isLoaded = loadDataFromStdin (copyToTable, dataFile, metaData, insertCount, table.isUseLockedMode());
-				} catch (Exception e) {
-					LOG.warn("Failed to load data directly via STDIN: " + e.getMessage());
-				}
-			}
-		}
-		
-		// still not loaded? final try with manual INSERTs
-		if (!isLoaded)
-		{
-			try {
-				isLoaded = loadDataWithInserts (copyToTable, dataFile, metaData, insertCount);
-			} catch (Exception e) {
-				LOG.error("Failed to load data with INSERTs: " + e.getMessage());
-			}
-		}
-		
-		// still not loaded? then unable to load, throw exception
-		if (!isLoaded) 
-		{
-			throw new Exception("Unable to load data into MonetDB for '" + table.getDescription() + "'");
-		}
 		
 		long loadTime = (System.currentTimeMillis() - startTime) / 1000;
 		LOG.info("Finished loading data into " + copyToTable.getName() + " in " + loadTime + " seconds");
 	}
 	
-	private boolean loadDataWithInserts(MonetDBTable monetDBTable, File dataFile,
-			ResultSetMetaData metaData, long rowCount) throws SQLException, IOException
-	{
-		LOG.info("Loading data with INSERTs into table " + monetDBTable.getToTableSql() + "...");
-		LOG.info("Batch size set: " + config.getBatchSize());
-
-		// build insert SQL
-		StringBuilder insertSql = new StringBuilder("INSERT INTO ");
-		insertSql.append(monetDBTable.getToTableSql());
-		insertSql.append(" (");
-
-		String[] colNames = new String[metaData.getColumnCount()];
-		String[] values = new String[metaData.getColumnCount()];
-
-		for (int i = 1; i <= metaData.getColumnCount(); i++)
-		{
-			String colName = metaData.getColumnName(i).toLowerCase();
-			colNames[i - 1] = MonetDBUtil.quoteMonetDbIdentifier(colName);
-		}
-
-		insertSql.append(StringUtils.join(colNames, ","));
-		insertSql.append(")");
-		insertSql.append(" VALUES (");
-
-		Statement insertStmt =
-			CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
-
-		CopyToolConnectionManager.getInstance().getMonetDbConnection().setAutoCommit(false);
-
-		long startTime = System.currentTimeMillis();
-
-		int batchCount = 0;
-		long insertCount = 0;
-		
-	    CSVReader reader = new CSVReader(new FileReader(dataFile));
-	    String [] line;
-	    while ((line = reader.readNext()) != null)
-		{
-			for (int i = 1; i <= metaData.getColumnCount(); i++)
-			{
-				String value = line[i-1];
-
-				if (value.equals("\\N"))
-				{
-					values[i - 1] = "NULL";
-				}
-				else
-				{
-					values[i - 1] = MonetDBUtil.quoteMonetDbValue(value);
-				}
-			}
-
-			StringBuilder insertRecordSql = new StringBuilder(insertSql);
-			insertRecordSql.append(StringUtils.join(values, ","));
-			insertRecordSql.append(")");
-
-			insertStmt.addBatch(insertRecordSql.toString());
-			batchCount++;
-
-			if (batchCount % config.getBatchSize() == 0)
-			{
-				LOG.info("Inserting next batch of " + config.getBatchSize() + " records...");
-
-				insertStmt.executeBatch();
-				CopyToolConnectionManager.getInstance().getMonetDbConnection().commit();
-
-				insertStmt.clearBatch();
-				insertCount = insertCount + batchCount;
-				batchCount = 0;
-
-				printInsertProgress(startTime, insertCount, rowCount);
-			}
-		}
-		
-		reader.close();
-
-		if (batchCount > 0)
-		{
-			LOG.info("Inserting final batch of " + batchCount + " records...");
-
-			insertStmt.executeBatch();
-			CopyToolConnectionManager.getInstance().getMonetDbConnection().commit();
-
-			insertStmt.clearBatch();
-			insertCount = insertCount + batchCount;
-
-			printInsertProgress(startTime, insertCount, rowCount);
-		}
-
-		CopyToolConnectionManager.getInstance().getMonetDbConnection().setAutoCommit(true);
-
-		return true;
-	}
-	
-	private boolean loadDataFromStdin (MonetDBTable monetDBTable, File dataFile,
-		ResultSetMetaData metaData, long rowCount, boolean useLockedMode)  
-		throws Exception
-	{
-		LOG.info("Loading data via STDIN into " + monetDBTable.getToTableSql());
-		
-		BufferedMCLReader in =
-			CopyToolConnectionManager.getInstance().getMonetDbServer().getReader();
-		BufferedMCLWriter out =
-			CopyToolConnectionManager.getInstance().getMonetDbServer().getWriter();
-
-		String error = in.waitForPrompt();
-		if (error != null)
-			throw new Exception(error);
-		
-		StringBuilder query = new StringBuilder();
-		query.append("COPY ");
-		
-		if (rowCount > 0)
-			query.append(rowCount).append(" RECORDS ");
-		
-		query.append(" INTO ").append(monetDBTable.getToTableSql());		
-		query.append(" FROM STDIN USING DELIMITERS ',','\\n','\"' NULL AS '\\\\N'");
-		
-		if (useLockedMode)
-			query.append(" LOCKED");
-		
-		query.append(";");
-
-		// the leading 's' is essential, since it is a protocol
-		// marker that should not be omitted, likewise the
-		// trailing semicolon
-		out.write('s');
-		out.write(query.toString());
-		out.newLine();
-
-		long startTime = System.currentTimeMillis();
-		long insertCount = 0;
-		
-		BufferedReader br = new BufferedReader(
-			new InputStreamReader(
-				new FileInputStream(dataFile), 
-				"UTF8"
-			)
-		);
-
-		String line;
-		while((line = br.readLine()) != null)
-		{
-			// write out record
-			out.write(line);
-
-			// record separator
-			out.newLine();
-
-			insertCount++;
-
-			if (insertCount % 100000 == 0)
-			{
-				printInsertProgress(startTime, insertCount, rowCount, "processed");
-			}
-		}
-		printInsertProgress(startTime, insertCount, rowCount, "processed");
-		br.close();
-		
-		LOG.info("Finalising COPY INTO... this may take a while!");
-
-		out.writeLine("");
-
-		error = in.waitForPrompt();
-		if (error != null)
-			throw new Exception(error);
-		
-		return true;
-	}
-	
-	private boolean loadDataFromFile (MonetDBTable monetDBTable, File dataFile,
-			ResultSetMetaData metaData, long rowCount, boolean useLockedMode) throws SQLException
-	{
-		LOG.info("Loading data directly from file into " + monetDBTable.getToTableSql());
-		
-		Statement copyStmt =
-				CopyToolConnectionManager.getInstance().getMonetDbConnection().createStatement();
-				
-		StringBuilder query = new StringBuilder();
-		query.append("COPY ");
-		
-		if (rowCount > 0)
-			query.append(rowCount).append(" RECORDS ");
-		
-		query.append(" INTO ").append(monetDBTable.getToTableSql());
-		query.append(" FROM '").append(dataFile.getAbsolutePath()).append("'");
-		query.append(" USING DELIMITERS ',','\\n','\"' NULL AS '\\\\N'");
-		
-		if (useLockedMode)
-			query.append(" LOCKED");
-		
-		query.append(";");
-		
-		// execute COPY INTO statement
-		copyStmt.execute(query.toString());
-		
-		copyStmt.close();
-		
-		return true;
-	}
-
 	private void checkTableInMonetDb(MonetDBTable monetDBTable, ResultSetMetaData metaData)
 			throws SQLException
 	{
@@ -1111,14 +829,12 @@ public class CopyTool
 		LOG.info("Finished copying the temp table to the result table");
 	}
 
-	
-
-	private void printInsertProgress (long startTime, long insertCount, long rowCount)
+	public static void printInsertProgress (long startTime, long insertCount, long rowCount)
 	{
 		printInsertProgress(startTime, insertCount, rowCount, "inserted");
 	}
 	
-	private void printInsertProgress(long startTime, long insertCount, long rowCount, String action)
+	public static void printInsertProgress(long startTime, long insertCount, long rowCount, String action)
 	{
 		long totalTime = System.currentTimeMillis() - startTime;
 

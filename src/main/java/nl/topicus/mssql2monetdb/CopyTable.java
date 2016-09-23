@@ -68,6 +68,8 @@ public class CopyTable
 	// determines when or not a copy job should allow this table to be empty or not
 	private boolean allowEmpty = false;
 	
+	private boolean useBinaryMode = false;
+	
 	private String loadDate;
 	
 	public void setLoadDate(String loadDateStr)
@@ -215,6 +217,16 @@ public class CopyTable
 	public boolean isUseLockedMode ()
 	{
 		return this.useLockedMode;
+	}
+	
+	public void setUseBinaryMode(boolean value)
+	{
+		this.useBinaryMode = value;
+	}
+	
+	public boolean isUseBinaryMode()
+	{
+		return this.useBinaryMode;
 	}
 
 	public MonetDBTable getCurrentTable()
