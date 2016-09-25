@@ -9,7 +9,9 @@ public class StringValueConverter implements ValueConverter
 	public byte[] convertValue(Object value) {
 		String out = (String)value;
 		
-		if (out != null)
+		if (out == null)
+			out = String.valueOf('\200');
+		else
 			out = out.replace("\n", "\\\\n");
 				
 		return (out + "\n").getBytes();
