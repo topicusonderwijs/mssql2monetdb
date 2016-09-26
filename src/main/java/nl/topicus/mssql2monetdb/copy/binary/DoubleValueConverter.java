@@ -1,6 +1,5 @@
 package nl.topicus.mssql2monetdb.copy.binary;
 
-import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
@@ -16,17 +15,9 @@ public class DoubleValueConverter implements ValueConverter
 		{
 			bb.putDouble(Double.MIN_VALUE);
 		}		
-		else if (value instanceof BigDecimal)
-		{
-			bb.putDouble(((BigDecimal)value).doubleValue());
-		}
-		else if (value instanceof Double)
+		else 
 		{
 			bb.putDouble((Double) value);
-		}
-		else
-		{
-			bb.putDouble(Double.MIN_VALUE);
 		}
 		
 		return bb.array();

@@ -27,18 +27,6 @@ public class CopyDataToBinary extends AbstractCopyData
 {
 	private static final Logger LOG =  LoggerFactory.getLogger(CopyDataToBinary.class);
 	
-	public static Map<String, ValueConverter> valueConverters;
-	static
-	{
-		valueConverters = new HashMap<>();
-		valueConverters.put("int", new IntegerValueConverter());
-		valueConverters.put("bigint", new LongValueConverter());
-		valueConverters.put("varchar", new StringValueConverter());
-		valueConverters.put("char", new StringValueConverter());
-		valueConverters.put("timestamp", new TimestampValueConverter());
-		valueConverters.put("numeric", new DoubleValueConverter());
-	}
-	
 	/**
 	 * Methode to check if a table can be loaded with binary mode. This depends on the schema
 	 * of the table.
@@ -48,16 +36,40 @@ public class CopyDataToBinary extends AbstractCopyData
 	{		
 		for (int i = 1; i <= metaData.getColumnCount(); i++)
 		{
-			String colType = MonetDBUtil.getMonetDbColumnType(i, metaData);
-			
-			if (!valueConverters.containsKey(colType))
+			if (getConverter(metaData, i) == null)
 			{
+				String colType = MonetDBUtil.getMonetDbColumnType(i, metaData);
 				LOG.info("Column '{}' with type '{}' is not supported in binary load", metaData.getColumnName(i), colType);
 				return false;
 			}
 		}
 		
 		return true;
+	}
+	
+	private static ValueConverter getConverter (ResultSetMetaData metaData, int colIndex) throws SQLException
+	{
+		String columnType = MonetDBUtil.getMonetDbColumnType(colIndex, metaData).toLowerCase();
+		
+		switch(columnType)
+		{
+			case "int":
+			case "integer":
+				return new IntegerValueConverter();
+			case "bigint":
+				return new LongValueConverter();
+			case "varchar":
+			case "char":
+				return new StringValueConverter();
+			case "timestamp":
+				return new TimestampValueConverter();
+			case "double":
+				return new DoubleValueConverter();
+			case "numeric":
+				return new BigDecimalConverter(metaData.getPrecision(colIndex));
+		}
+		
+		return null;
 	}
 	
 	@Override
@@ -75,7 +87,7 @@ public class CopyDataToBinary extends AbstractCopyData
 		for (int i = 1; i <= columnCount; i++)
 		{
 			bw[i-1] = new BufferedOutputStream(new FileOutputStream(tmpDir + "/" + tmpFilePrefix + "_data_" + i + ".bin"));
-			converters[i-1] = valueConverters.get(MonetDBUtil.getMonetDbColumnType(i, metaData));
+			converters[i-1] = getConverter(metaData, i);
 		}
 		
 		while (resultSet.next())
