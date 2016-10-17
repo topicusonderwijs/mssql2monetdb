@@ -635,7 +635,13 @@ public class CopyToolConfig
 			
 			String[] split = propName.split("\\.");
 			
-			if (split[0].equals("mssql") == false)
+			SourceDatabaseType databaseType;
+			
+			if (split[0].equals("mssql"))
+				databaseType  =SourceDatabaseType.MSSQL;
+			else if (split[0].equals("postgresql"))
+				databaseType  =SourceDatabaseType.POSTGRESQL;
+			else
 				continue;
 						
 			String id;
@@ -665,6 +671,7 @@ public class CopyToolConfig
 				db.setId(id);
 			}
 			
+			db.setDatabaseType(databaseType);
 			if (key.equals("user"))
 			{
 				db.setUser(propValue);
@@ -733,7 +740,7 @@ public class CopyToolConfig
 			LOG.info("The following databases will be used as sources: ");
 			for (SourceDatabase db : sourceDatabases.values())
 			{
-				LOG.info("* " + db.getId() + ": " + db.getDatabase() + " (" + db.getServer() + ")");
+				LOG.info("* " + db.getDatabaseType() + " : " + db.getId() + ": " + db.getDatabase() + " (" + db.getServer() + ")");
 			}
 		}
 		

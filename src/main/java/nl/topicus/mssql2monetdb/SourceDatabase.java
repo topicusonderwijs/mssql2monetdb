@@ -12,6 +12,8 @@ import org.slf4j.LoggerFactory;
 public class SourceDatabase {
 	private static final Logger LOG = LoggerFactory.getLogger(SourceDatabase.class);
 	
+	private SourceDatabaseType databaseType;
+	
 	private String id;
 	
 	private String server;
@@ -28,7 +30,7 @@ public class SourceDatabase {
 	
 	private Connection conn;
 	
-	public Connection getConnection () throws SQLException
+	public Connection getConnection() throws SQLException
 	{
 		// already have an existing connection?
 		if (this.conn != null && !this.conn.isClosed())
@@ -49,11 +51,11 @@ public class SourceDatabase {
 			connProps.setProperty("instance", instance);
 		}
 		
-		String url = "jdbc:jtds:sqlserver://" + server + ":" + port + "/" + database;
-		LOG.info("Using connection URL for MS SQL Server '" + this.id + "': " + url);
+		String jdbcUrl = databaseType.getJDBCUrl(server, port, database);
+		LOG.info("Using connection URL for " + databaseType + " '" + this.id + "': " + jdbcUrl);
 
-		this.conn = DriverManager.getConnection(url, connProps);
-		LOG.info("Opened connection to MS SQL Server '" + this.id + "'");
+		this.conn = DriverManager.getConnection(jdbcUrl, connProps);
+		LOG.info("Opened connection to " + databaseType + " '" + this.id + "'");
 		
 		return this.conn;
 	}
@@ -67,14 +69,23 @@ public class SourceDatabase {
 			if (!this.conn.isClosed())
 			{
 				this.conn.close();
-				LOG.info("Closed connection to MS SQL Server '" + this.id + "'");
+				LOG.info("Closed connection to " + databaseType + " '" + this.id + "'");
 			}
 			
 		} catch (SQLException e) {
-			LOG.warn("Got exception trying to close connection to MS SQL Server '" + this.id + "'", e);
+			LOG.warn("Got exception trying to close connection to " + databaseType + " '" + this.id + "'", e);
 		}			
 	}
 	
+	
+	public SourceDatabaseType getDatabaseType() {
+		return databaseType;
+	}
+
+	public void setDatabaseType(SourceDatabaseType databaseType) {
+		this.databaseType = databaseType;
+	}
+
 	public String getId() {
 		return id;
 	}

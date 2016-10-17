@@ -125,6 +125,11 @@ public class CopyToolConnectionManager
 		}
 	}
 
+	public SourceDatabase getSourceDatabase(String sourceId)
+	{
+		return sourceDatabases.get(sourceId);
+	}
+	
 	public void closeConnections()
 	{
 		LOG.info("Closing database connections...");
@@ -157,9 +162,9 @@ public class CopyToolConnectionManager
 		}
 	}
 
-	public Connection getMssqlConnection(String sourceId) throws SQLException
+	public Connection getSourceConnection(String sourceId) throws SQLException
 	{
-		SourceDatabase db = sourceDatabases.get(sourceId);
+		SourceDatabase db = getSourceDatabase(sourceId);
 		
 		if (db == null)
 		{
