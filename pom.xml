@@ -4,7 +4,7 @@
 	<groupId>nl.topicus.mssql2monetdb</groupId>
 	<artifactId>mssql2monetdb</artifactId>
 	<packaging>jar</packaging>
-	<version>1.5-SNAPSHOT</version>
+	<version>1.5</version>
 	<name>mssql2monetdb</name>
 	<url>http://maven.apache.org</url>
 
