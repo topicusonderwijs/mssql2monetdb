@@ -6,8 +6,6 @@ target/
 logs/
 docker/*.jar
 
-*.properties
-
 # OS generated files #
 ######################
 .DS_Store*
