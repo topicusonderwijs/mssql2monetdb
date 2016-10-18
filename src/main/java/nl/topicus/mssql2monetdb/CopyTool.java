@@ -35,7 +35,7 @@ import nl.cwi.monetdb.mcl.io.BufferedMCLReader;
 import nl.cwi.monetdb.mcl.io.BufferedMCLWriter;
 import nl.topicus.mssql2monetdb.util.EmailUtil;
 import nl.topicus.mssql2monetdb.util.MonetDBUtil;
-import nl.topicus.mssql2monetdb.util.MssqlUtil;
+import nl.topicus.mssql2monetdb.util.SourceDatabaseUtil;
 import nl.topicus.mssql2monetdb.util.SerializableResultSetMetaData;
 
 import org.apache.commons.lang.StringUtils;
@@ -46,6 +46,8 @@ import au.com.bytecode.opencsv.CSVReader;
 
 public class CopyTool
 {
+	private static final String NULL_VALUE = "\\N";
+
 	private static final Logger LOG =  LoggerFactory.getLogger(CopyTool.class);
 	
 	private static final int SLEEP_INCREMENT = 1 * 60 * 1000;
@@ -187,7 +189,7 @@ public class CopyTool
 			}
 			
 			// verify all MSSQL tables have data
-			if (!MssqlUtil.allMSSQLTablesHaveData(tablesToCopy))
+			if (!SourceDatabaseUtil.allSourceTablesHaveData(tablesToCopy))
 			{
 				LOG.warn("Not all tables have data");
 				CopyToolConnectionManager.getInstance().closeConnections();
@@ -197,7 +199,7 @@ public class CopyTool
 			// verify MonetDB database is working by opening connection
 			CopyToolConnectionManager.getInstance().openMonetDbConnection();
 			
-			LOG.info("STARTING PHASE 1: copying data from MS SQL source databases to local disk");
+			LOG.info("STARTING PHASE 1: copying data from source databases to local disk");
 			
 			// phase 1: copy data from MS SQL sources to local disk
 			for(CopyTable table : tablesToCopy.values())
@@ -205,7 +207,7 @@ public class CopyTool
 				copyData(table);
 			}
 
-			LOG.info("PHASE 1 FINISHED: all data copied from MS SQL source databases to local disk");
+			LOG.info("PHASE 1 FINISHED: all data copied from source databases to local disk");
 			
 			LOG.info("STARTING PHASE 2: loading data into target MonetDB database");
 			
@@ -337,14 +339,13 @@ public class CopyTool
 		int colType = -1;
 		try 
 		{
-			Statement selectStmt =
-					CopyToolConnectionManager.getInstance().getMssqlConnection(config.getTriggerSource()).createStatement();
+			SourceDatabase sourceDatabase =  CopyToolConnectionManager.getInstance().getSourceDatabase(config.getTriggerSource());
 			
-			ResultSet res = selectStmt.executeQuery(
-				"SELECT TOP 1 [" + config.getTriggerColumn() + "] "
-				+ "FROM [" + config.getTriggerTable() + "] "
-				+ "ORDER BY [" + config.getTriggerColumn() + "] DESC"
-			);
+			Statement selectStmt =
+					CopyToolConnectionManager.getInstance().getSourceConnection(config.getTriggerSource()).createStatement();
+			
+			String triggerDate = sourceDatabase.getDatabaseType().getSelectTriggerColumnQuery(config.getTriggerTable(), config.getTriggerColumn());
+			ResultSet res = selectStmt.executeQuery(triggerDate);
 			
 			// no rows in table? then we cannot determine any indication
 			// so we return indication of new data
@@ -625,16 +626,16 @@ public class CopyTool
 	}
 	
 	/**
-	 * Copies data from a MSSQL table to local disk, including meta data and row count.
+	 * Copies data from a source table to local disk, including meta data and row count.
 	 * @throws SQLException 
 	 */
 	private void copyData(CopyTable table) throws Exception
 	{
 		LOG.info("Starting with copy of data from '" + table.getDescription() + "' to disk...");
 		
-		// select data from MS SQL Server
+		// select data from source database
 		Statement selectStmt =
-			CopyToolConnectionManager.getInstance().getMssqlConnection(table.getSource()).createStatement();
+			CopyToolConnectionManager.getInstance().getSourceConnection(table.getSource()).createStatement();
 
 		// get number of rows in table
 		ResultSet resultSet =
@@ -692,7 +693,7 @@ public class CopyTool
 
 				if (value == null)
 				{
-					bw.write("\\N");
+					bw.write(NULL_VALUE);
 				}
 				else
 				{
@@ -899,7 +900,7 @@ public class CopyTool
 			{
 				String value = line[i-1];
 
-				if (value.equals("\\N"))
+				if (value.equals(NULL_VALUE))
 				{
 					values[i - 1] = "NULL";
 				}
@@ -1132,9 +1133,6 @@ public class CopyTool
 		
 		LOG.info("Progress: {} out of {} ({}%)", insertCount, rowCount, formatPerc.format(perc));
 		LOG.info("Time: {} seconds spent; estimated time left is {} seconds", (totalTime / 1000), timeLeft);
-		
-		
-
 	}
 	
 	private void loadDatabaseDrivers () throws ClassNotFoundException
@@ -1142,6 +1140,7 @@ public class CopyTool
 		// make sure JDBC drivers are loaded
 		Class.forName("nl.cwi.monetdb.jdbc.MonetDriver");
 		Class.forName("net.sourceforge.jtds.jdbc.Driver");
+		Class.forName("org.postgresql.Driver");
 	}
 
 }

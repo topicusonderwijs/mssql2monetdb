@@ -635,7 +635,13 @@ public class CopyToolConfig
 			
 			String[] split = propName.split("\\.");
 			
-			if (split[0].equals("mssql") == false)
+			SourceDatabaseType databaseType;
+			
+			if (split[0].equals("mssql"))
+				databaseType  =SourceDatabaseType.MSSQL;
+			else if (split[0].equals("postgresql"))
+				databaseType  =SourceDatabaseType.POSTGRESQL;
+			else
 				continue;
 						
 			String id;
@@ -665,6 +671,8 @@ public class CopyToolConfig
 				db.setId(id);
 			}
 			
+			db.setDatabaseType(databaseType);
+			db.setPort(databaseType.getDefaultPort());
 			if (key.equals("user"))
 			{
 				db.setUser(propValue);
@@ -694,7 +702,7 @@ public class CopyToolConfig
 				}
 				catch (NumberFormatException e)
 				{
-					LOG.warn("Invalid port specified for MSSQL '" + id + "', must be a valid integer!");
+					LOG.warn("Invalid port specified for " + databaseType + " '" + id + "', must be a valid integer!");
 				}
 			}
 			
@@ -712,13 +720,13 @@ public class CopyToolConfig
 			
 			if (StringUtils.isEmpty(db.getDatabase()))
 			{
-				LOG.error("MSSQL database with id '" + id + "' is missing the database name in the config!");
+				LOG.error(db.getDatabaseType() + " database with id '" + id + "' is missing the database name in the config!");
 				iter.remove();
 			}
 			
 			if (StringUtils.isEmpty(db.getServer()))
 			{
-				LOG.error("MSSQL database with id '" + id + "' is missing the server in the config!");
+				LOG.error(db.getDatabaseType() + " database with id '" + id + "' is missing the server in the config!");
 				iter.remove();
 			}				
 		}
@@ -733,7 +741,7 @@ public class CopyToolConfig
 			LOG.info("The following databases will be used as sources: ");
 			for (SourceDatabase db : sourceDatabases.values())
 			{
-				LOG.info("* " + db.getId() + ": " + db.getDatabase() + " (" + db.getServer() + ")");
+				LOG.info("* " + db.getDatabaseType() + " : " + db.getId() + ": " + db.getDatabase() + " (" + db.getServer() + ")");
 			}
 		}
 		

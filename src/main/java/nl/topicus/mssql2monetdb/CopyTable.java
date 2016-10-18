@@ -295,7 +295,7 @@ public class CopyTable
 	{
 		if (StringUtils.isNotEmpty(getFromName()))
 		{
-			return "SELECT COUNT(*) FROM [" + getFromName() + "]";
+			return "SELECT COUNT(*) FROM " + getFromName();
 		} else {
 			return getFromCountQuery();
 		}
@@ -315,7 +315,7 @@ public class CopyTable
 				columns = "*";
 			}
 			
-			return "SELECT " + columns + " FROM [" + getFromName() + "]";
+			return "SELECT " + columns + " FROM " + getFromName() + "";
 		} else {
 			return getFromQuery();
 		}
