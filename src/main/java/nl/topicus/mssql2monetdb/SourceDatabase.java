@@ -18,7 +18,7 @@ public class SourceDatabase {
 	
 	private String server;
 	
-	private int port = 1433;
+	private int port = -1;
 	
 	private String database;
 

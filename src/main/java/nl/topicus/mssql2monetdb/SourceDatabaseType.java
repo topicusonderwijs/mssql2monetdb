@@ -23,6 +23,11 @@ public enum SourceDatabaseType {
 					+ "FROM [" + triggerTable + "] "
 					+ "ORDER BY [" + triggerColumn + "] DESC";
 		}
+
+		@Override
+		public int getDefaultPort() {
+			return 1433;
+		}
 	},
 	POSTGRESQL
 	{
@@ -42,6 +47,11 @@ public enum SourceDatabaseType {
 					+ "FROM " + triggerTable + " "
 					+ "ORDER BY " + triggerColumn + " DESC LIMIT 1";
 		}
+
+		@Override
+		public int getDefaultPort() {
+			return 5432;
+		}
 	};
 
 	/**
@@ -60,4 +70,10 @@ public enum SourceDatabaseType {
 	 * @return The SQL Query used for selecting the triggercolumn.
 	 */
 	public abstract String getSelectTriggerColumnQuery(String triggerTable, String triggerColumn);
+
+	/**
+	 * 
+	 * @return The default port for connections to this database.
+	 */
+	public abstract int getDefaultPort();
 }

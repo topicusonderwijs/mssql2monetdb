@@ -672,6 +672,7 @@ public class CopyToolConfig
 			}
 			
 			db.setDatabaseType(databaseType);
+			db.setPort(databaseType.getDefaultPort());
 			if (key.equals("user"))
 			{
 				db.setUser(propValue);
@@ -701,7 +702,7 @@ public class CopyToolConfig
 				}
 				catch (NumberFormatException e)
 				{
-					LOG.warn("Invalid port specified for MSSQL '" + id + "', must be a valid integer!");
+					LOG.warn("Invalid port specified for " + databaseType + " '" + id + "', must be a valid integer!");
 				}
 			}
 			
@@ -719,13 +720,13 @@ public class CopyToolConfig
 			
 			if (StringUtils.isEmpty(db.getDatabase()))
 			{
-				LOG.error("MSSQL database with id '" + id + "' is missing the database name in the config!");
+				LOG.error(db.getDatabaseType() + " database with id '" + id + "' is missing the database name in the config!");
 				iter.remove();
 			}
 			
 			if (StringUtils.isEmpty(db.getServer()))
 			{
-				LOG.error("MSSQL database with id '" + id + "' is missing the server in the config!");
+				LOG.error(db.getDatabaseType() + " database with id '" + id + "' is missing the server in the config!");
 				iter.remove();
 			}				
 		}

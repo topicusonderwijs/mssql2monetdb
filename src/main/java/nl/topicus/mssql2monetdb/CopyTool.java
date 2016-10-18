@@ -35,7 +35,7 @@ import nl.cwi.monetdb.mcl.io.BufferedMCLReader;
 import nl.cwi.monetdb.mcl.io.BufferedMCLWriter;
 import nl.topicus.mssql2monetdb.util.EmailUtil;
 import nl.topicus.mssql2monetdb.util.MonetDBUtil;
-import nl.topicus.mssql2monetdb.util.MssqlUtil;
+import nl.topicus.mssql2monetdb.util.SourceDatabaseUtil;
 import nl.topicus.mssql2monetdb.util.SerializableResultSetMetaData;
 
 import org.apache.commons.lang.StringUtils;
@@ -189,7 +189,7 @@ public class CopyTool
 			}
 			
 			// verify all MSSQL tables have data
-			if (!MssqlUtil.allMSSQLTablesHaveData(tablesToCopy))
+			if (!SourceDatabaseUtil.allSourceTablesHaveData(tablesToCopy))
 			{
 				LOG.warn("Not all tables have data");
 				CopyToolConnectionManager.getInstance().closeConnections();
