@@ -199,7 +199,7 @@ public class CopyTool
 			// verify MonetDB database is working by opening connection
 			CopyToolConnectionManager.getInstance().openMonetDbConnection();
 			
-			LOG.info("STARTING PHASE 1: copying data from MS SQL source databases to local disk");
+			LOG.info("STARTING PHASE 1: copying data from source databases to local disk");
 			
 			// phase 1: copy data from MS SQL sources to local disk
 			for(CopyTable table : tablesToCopy.values())
@@ -207,7 +207,7 @@ public class CopyTool
 				copyData(table);
 			}
 
-			LOG.info("PHASE 1 FINISHED: all data copied from MS SQL source databases to local disk");
+			LOG.info("PHASE 1 FINISHED: all data copied from source databases to local disk");
 			
 			LOG.info("STARTING PHASE 2: loading data into target MonetDB database");
 			
