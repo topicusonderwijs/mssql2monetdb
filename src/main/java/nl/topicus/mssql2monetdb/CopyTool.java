@@ -614,6 +614,9 @@ public class CopyTool
 		dataFile.delete();
 		countFile.delete();
 		metaDataFile.delete();
+		
+		File tempDir = new File(config.getTempDirectory());
+		tempDir.delete();
 	}
 	
 	private void writeInsertCountFile (String tmpDir, String tmpFilePrefix, long insertCount) throws IOException
@@ -770,10 +773,7 @@ public class CopyTool
 		} catch (NumberFormatException e) {
 			throw new Exception("Unable to read row count from temporary count file for '" + table.getDescription() + "'");
 		}
-		
-		if (insertCount == null)
-			throw new Exception("Unable to read row count from temporary count file for '" + table.getDescription() + "'");
-		
+			
 		// read metadata
 		SerializableResultSetMetaData metaData = null;
 		try {

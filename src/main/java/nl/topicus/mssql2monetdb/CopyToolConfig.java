@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -393,7 +394,7 @@ public class CopyToolConfig
 		return config;
 	}
 	
-	private String findTempDirectory (Properties config)
+	private String findTempDirectory (Properties config) throws ConfigException
 	{
 		String defaultTempDir = System.getProperty("java.io.tmpdir");
 		String tempDir = config.getProperty(CONFIG_KEYS.TEMP_DIR.toString());
@@ -414,8 +415,8 @@ public class CopyToolConfig
 		
 		if (dir.exists() && dir.isFile())
 		{
-			LOG.error("Unable to use '" + tempDir + "' as temporary directory. Already exists as file. Using standard temp directory.");
-			return defaultTempDir;
+			LOG.warn("Unable to use '" + tempDir + "' as temporary directory. Already exists as file. Using standard temp directory.");
+			dir = new File(defaultTempDir);
 		}
 		
 		if (!dir.exists())
@@ -423,7 +424,7 @@ public class CopyToolConfig
 			if (!dir.mkdir())
 			{
 				LOG.error("Unable to create temp directory '" + tempDir + "'. Using standard temp directory.");
-				return defaultTempDir;
+				dir = new File(defaultTempDir);
 			}
 		}
 		
@@ -434,18 +435,24 @@ public class CopyToolConfig
 			if (!sample.createNewFile())
 			{
 				LOG.error("Unable to write to temp directory '" + tempDir + "'. Using standard temp directory.");
-				return defaultTempDir;
+				dir = new File(defaultTempDir);
 			}
 			
 			sample.delete();
 		} catch (IOException e) {
 			LOG.error("Unable to write to temp directory '" + tempDir + "'. Using standard temp directory.");
-			return defaultTempDir;
+			dir = new File(defaultTempDir);
 		}
 		
-		// all checks ok, so use custom temp directory
-		return tempDir;
+		// create own sub-directory for copy job
+		Path tempPath;
+		try {
+			tempPath = Files.createTempDirectory(dir.toPath(), "mssql2monetdb_");
+		} catch (IOException e) {
+			throw new ConfigException("Unable to create temporary (sub-)directory in '" + dir.getAbsolutePath() + "'.", e);
+		}
 		
+		return tempPath.toString();		
 	}
 	
 	private void findTriggerProperties (Properties config)
