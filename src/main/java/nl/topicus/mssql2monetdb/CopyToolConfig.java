@@ -6,16 +6,20 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
+import java.util.Set;
 
 import nl.topicus.mssql2monetdb.util.EmailUtil;
 
@@ -447,7 +451,13 @@ public class CopyToolConfig
 		// create own sub-directory for copy job
 		Path tempPath;
 		try {
-			tempPath = Files.createTempDirectory(dir.toPath(), "mssql2monetdb_");
+			Set<PosixFilePermission> allPermissions = new HashSet<>(Arrays.asList(
+					PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE,
+					PosixFilePermission.GROUP_READ, PosixFilePermission.GROUP_WRITE, PosixFilePermission.GROUP_EXECUTE,
+					PosixFilePermission.OTHERS_WRITE, PosixFilePermission.OTHERS_READ, PosixFilePermission.OTHERS_EXECUTE
+			));
+			
+			tempPath = Files.createTempDirectory(dir.toPath(), "mssql2monetdb_", PosixFilePermissions.asFileAttribute(allPermissions));
 		} catch (IOException e) {
 			throw new ConfigException("Unable to create temporary (sub-)directory in '" + dir.getAbsolutePath() + "'.", e);
 		}
