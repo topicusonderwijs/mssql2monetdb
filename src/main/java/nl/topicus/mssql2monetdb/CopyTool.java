@@ -191,9 +191,8 @@ public class CopyTool
 			// verify all MSSQL tables have data
 			if (!SourceDatabaseUtil.allSourceTablesHaveData(tablesToCopy))
 			{
-				LOG.warn("Not all tables have data");
 				CopyToolConnectionManager.getInstance().closeConnections();
-				return;
+				throw new EmptyTablesException("Not all source tables/queries have data");
 			}
 			
 			// verify MonetDB database is working by opening connection
