@@ -16,6 +16,7 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
 import java.io.Writer;
+import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -700,7 +701,15 @@ public class CopyTool
 				}
 				else
 				{
-					String valueStr = value.toString();
+					String valueStr;
+					if (value instanceof BigDecimal)
+					{
+						valueStr = ((BigDecimal)value).toPlainString();
+					}
+					else
+					{
+						valueStr = value.toString();
+					}
 
 					// escape \ with \\
 					valueStr = valueStr.replaceAll("\\\\", "\\\\\\\\");
