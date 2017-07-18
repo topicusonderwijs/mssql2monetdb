@@ -561,8 +561,8 @@ public class CopyTool
 		ResultSet result =
 			q.executeQuery("SELECT name FROM sys.tables WHERE name LIKE '" + table.getToName()
 				+ "_20%_%' AND name <> '" + table.getToName() + "' "
-				+ "AND schema_id = (SELECT id from sys.schemas WHERE name = '" + table.getSchema()
-				+ "') AND query IS NULL ORDER BY name DESC");
+				+ "AND schema_id = (SELECT id from sys.schemas WHERE LOWER(name) = LOWER('" + table.getSchema()
+				+ "')) AND query IS NULL ORDER BY name DESC");
 		
 		int i = 0;
 		int dropCount = 0;

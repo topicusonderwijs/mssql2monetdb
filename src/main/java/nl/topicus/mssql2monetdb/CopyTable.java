@@ -157,6 +157,9 @@ public class CopyTable
 
 	public void setSchema(String schema)
 	{
+		if (schema != null)
+			schema = schema.toLowerCase();
+		
 		this.schema = schema;
 	}
 	

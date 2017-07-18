@@ -45,8 +45,8 @@ public class MonetDBUtil
 		{
 			ResultSet result =
 				q.executeQuery("SELECT name FROM sys.tables WHERE name = " + quoteMonetDbValue(name)
-					+ " AND schema_id = (SELECT id FROM sys.schemas WHERE name = " + quoteMonetDbValue(schema)
-					+ ")");
+					+ " AND schema_id = (SELECT id FROM sys.schemas WHERE LOWER(name) = LOWER(" + quoteMonetDbValue(schema)
+					+ "))");
 			
 			boolean ret = result.next();			
 			result.close();
@@ -70,8 +70,8 @@ public class MonetDBUtil
 		
 			ResultSet result =
 				q.executeQuery("SELECT query FROM sys.tables WHERE name = '" + name
-					+ "' and schema_id = (SELECT id from sys.schemas WHERE name = '" + schema
-					+ "')");
+					+ "' and schema_id = (SELECT id from sys.schemas WHERE LOWER(name) = LOWER('" + schema
+					+ "'))");
 			
 			// the query column will be filled with a query when its a view, so if its
 			// null it will be a table			
