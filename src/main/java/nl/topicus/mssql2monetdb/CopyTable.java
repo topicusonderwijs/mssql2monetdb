@@ -68,6 +68,9 @@ public class CopyTable
 	// determines when or not a copy job should allow this table to be empty or not
 	private boolean allowEmpty = false;
 	
+	// determine whether or not to auto-trim all values
+	private boolean autoTrim = true;
+	
 	private String loadDate;
 	
 	public void setLoadDate(String loadDateStr)
@@ -330,5 +333,13 @@ public class CopyTable
 
 	public void setAllowEmpty(boolean allowEmpty) {
 		this.allowEmpty = allowEmpty;
+	}
+
+	public boolean isAutoTrim() {
+		return autoTrim;
+	}
+
+	public void setAutoTrim(boolean autoTrim) {
+		this.autoTrim = autoTrim;
 	}
 }

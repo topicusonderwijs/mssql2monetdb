@@ -902,6 +902,9 @@ public class CopyToolConfig
 				case "allowempty":
 					table.setAllowEmpty(boolValue);
 					break;
+				case "autotrim":
+					table.setAutoTrim(boolValue);
+					break;
 				case "copymethod":
 					propValue = propValue.toLowerCase();
 					if (propValue.equals("copyinto"))

@@ -709,6 +709,9 @@ public class CopyTool
 					{
 						valueStr = value.toString();
 					}
+					
+					if (table.isAutoTrim())
+						valueStr = valueStr.trim();
 
 					// escape \ with \\
 					valueStr = valueStr.replaceAll("\\\\", "\\\\\\\\");
