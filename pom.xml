@@ -116,10 +116,10 @@
 			<plugin>
 				<groupId>com.spotify</groupId>
 		      	<artifactId>docker-maven-plugin</artifactId>
-		      	<version>0.4.10</version>
+		      	<version>1.0.0</version>
 		      	<configuration>
-		      		<serverId>docker-hub</serverId>
-		        	<imageName>dennisp/mssql2monetdb</imageName>
+					<serverId>docker.topicusonderwijs.nl</serverId>
+					<imageName>docker.topicusonderwijs.nl/ultimview/mssql2monetdb-base</imageName>
 		        	<dockerDirectory>docker</dockerDirectory>
 		        	<!-- copy the service's jar file from target into the root directory of the image --> 
 		        	<resources>
