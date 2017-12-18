@@ -12,7 +12,8 @@ node() {
 
 		stage("Maven package") {
 		   	//Deze maven package zorgt ervoor dat de docker:build niet klaagt dat er geen 'target' dir is.
-			maven { 
+			maven {
+				cleanup = false 
 				stage = ''
 				goals = 'package'
 			}               
